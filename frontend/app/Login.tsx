@@ -82,7 +82,11 @@ export default function LoginScreen() {
         const data = await response.json();
         if (response.ok) {
           Alert.alert('Success', 'Logged in successfully');
-          router.push('/Login');
+          if (data.role === 'admin') {
+            router.push('/admin/admindashboard');
+          } else {
+            router.push('/user/home');
+          }
         } else {
           Alert.alert('Error', data.error);
         }
