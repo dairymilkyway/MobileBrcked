@@ -82,6 +82,7 @@ export default function LoginScreen() {
         const data = await response.json();
         if (response.ok) {
           Alert.alert('Success', 'Logged in successfully');
+          router.push('/Login');
         } else {
           Alert.alert('Error', data.error);
         }
