@@ -4,6 +4,8 @@ const dotenv = require('dotenv');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const User = require('./models/User');
+// Import the product routes
+const productRoutes = require('./apis/ProductAPI');
 const authenticateToken = require('./middleware/auth'); // ✅ Import auth middleware
 
 dotenv.config();
@@ -54,6 +56,12 @@ app.post('/api/login', async (req, res) => {
   }
 });
 
+// Use product routes
+app.use('/api/products', productRoutes);
+
+// Use product routes
+app.use('/api/products', productRoutes);
+
 // ✅ Protected route example
 app.get('/api/profile', authenticateToken, async (req, res) => {
   try {
@@ -77,4 +85,4 @@ app.get('/api/admin/data', authenticateToken, (req, res) => {
 
 // ✅ Start server
 const PORT = process.env.PORT || 9000;
-app.listen(PORT, () => console.log(`✅ Server running on port ${PORT}`));
+app.listen(PORT, () => console.log(`Server running on port ${PORT}`));

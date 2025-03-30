@@ -72,8 +72,7 @@ export default function LoginScreen() {
       });
     };
   }, []);
-
-  const API_BASE_URL = 'http://192.168.0.251:9000/api';
+  const API_BASE_URL = 'http://192.168.1.143:9000/api';
 
   // ✅ Login handler with AsyncStorage token saving
   const handleLogin = async () => {
