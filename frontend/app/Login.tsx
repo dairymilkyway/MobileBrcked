@@ -15,6 +15,7 @@ import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
+import AsyncStorage from '@react-native-async-storage/async-storage'; // ✅ Import AsyncStorage
 
 const { width } = Dimensions.get('window');
 
@@ -26,8 +27,24 @@ export default function LoginScreen() {
   
   // Animation for background studs
   const studAnimations = useRef([...Array(8)].map(() => new Animated.Value(0))).current;
-  
+
   useEffect(() => {
+    // ✅ Check if user is already logged in
+    const checkLoginStatus = async () => {
+      const token = await AsyncStorage.getItem('userToken');
+      const role = await AsyncStorage.getItem('userRole');
+
+      if (token) {
+        if (role === 'admin') {
+          router.replace('/admin/admindashboard');
+        } else {
+          router.replace('/user/home');
+        }
+      }
+    };
+
+    checkLoginStatus();
+
     // Animate background studs
     studAnimations.forEach((anim, i) => {
       Animated.loop(
@@ -55,23 +72,24 @@ export default function LoginScreen() {
       });
     };
   }, []);
-  const API_BASE_URL = 'http://192.168.1.118:9000/api';
 
+  const API_BASE_URL = 'http://192.168.0.251:9000/api';
+
+  // ✅ Login handler with AsyncStorage token saving
   const handleLogin = async () => {
-    // Button press animation
     Animated.sequence([
       Animated.timing(buttonScale, {
         toValue: 0.95,
         duration: 100,
         useNativeDriver: true,
-        easing: Easing.out(Easing.ease)
+        easing: Easing.out(Easing.ease),
       }),
       Animated.timing(buttonScale, {
         toValue: 1,
         duration: 100,
         useNativeDriver: true,
-        easing: Easing.in(Easing.ease)
-      })
+        easing: Easing.in(Easing.ease),
+      }),
     ]).start(async () => {
       try {
         const response = await fetch(`${API_BASE_URL}/login`, {
@@ -79,8 +97,13 @@ export default function LoginScreen() {
           headers: { 'Content-Type': 'application/json' },
           body: JSON.stringify({ email, password }),
         });
+
         const data = await response.json();
         if (response.ok) {
+          // ✅ Save token and role to AsyncStorage
+          await AsyncStorage.setItem('userToken', data.token);
+          await AsyncStorage.setItem('userRole', data.role);
+
           Alert.alert('Success', 'Logged in successfully');
           if (data.role === 'admin') {
             router.push('/admin/admindashboard');
@@ -95,7 +118,6 @@ export default function LoginScreen() {
       }
     });
   };
-  
 
   return (
     <SafeAreaView style={styles.container}>

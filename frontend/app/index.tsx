@@ -174,7 +174,7 @@ export default function LandingPage() {
         {/* Logo */}
         <View style={styles.logoContainer}>
           <View style={styles.logoBlock}>
-            <MaterialCommunityIcons name="toy-brick" size={60} color="#FFFFFF" />
+            <MaterialCommunityIcons name="toy-brick" size={60} color="#FFFFF" />
           </View>
           <Text style={styles.logoText}>BRCKD</Text>
         </View>
@@ -297,6 +297,7 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   logoContainer: {
+    color: 'FFFFFF',
     flexDirection: 'row',
     alignItems: 'center',
   },

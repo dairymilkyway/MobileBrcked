@@ -1,13 +1,15 @@
-import React from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, Image } from 'react-native';
+import React, { useState } from 'react';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, Image, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
 import { IconSymbol } from './ui/IconSymbol';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 export default function UserHeader({ section = 'Home' }) {
   const router = useRouter();
   const colorScheme = useColorScheme();
+  const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // LEGO studs for the top of bricks
   const renderStuds = (count: number) => {
@@ -20,6 +22,19 @@ export default function UserHeader({ section = 'Home' }) {
       );
     }
     return studs;
+  };
+
+  const handleLogout = async () => {
+    try {
+      // Clear the user token and role from AsyncStorage
+      await AsyncStorage.removeItem('userToken');
+      await AsyncStorage.removeItem('userRole');
+      
+      // Navigate back to the login screen
+      router.replace('/Login');
+    } catch (error) {
+      console.error('Error during logout:', error);
+    }
   };
 
   return (
@@ -66,8 +81,56 @@ export default function UserHeader({ section = 'Home' }) {
             />
             <View style={styles.buttonStud} />
           </TouchableOpacity>
+          <TouchableOpacity 
+            style={[styles.legoButton, { backgroundColor: '#FF3A2F' }]}
+            onPress={() => setShowLogoutModal(true)}
+          >
+            <MaterialCommunityIcons name="logout" size={22} color="#FFFFFF" />
+            <View style={styles.buttonStud} />
+          </TouchableOpacity>
         </View>
       </View>
+
+      {/* Logout Confirmation Modal */}
+      <Modal
+        animationType="fade"
+        transparent={true}
+        visible={showLogoutModal}
+        onRequestClose={() => setShowLogoutModal(false)}
+      >
+        <View style={styles.modalOverlay}>
+          <View style={styles.modalContent}>
+            {/* LEGO studs at the top of modal */}
+            <View style={styles.modalStudsContainer}>
+              {renderStuds(4)}
+            </View>
+            
+            <View style={styles.modalBody}>
+              <MaterialCommunityIcons name="toy-brick-outline" size={50} color="#E3000B" />
+              <Text style={styles.modalTitle}>Time to disassemble?</Text>
+              <Text style={styles.modalText}>Are you sure you want to log out?</Text>
+              
+              <View style={styles.modalButtons}>
+                <TouchableOpacity 
+                  style={[styles.modalButton, styles.cancelButton]}
+                  onPress={() => setShowLogoutModal(false)}
+                >
+                  <Text style={styles.cancelButtonText}>CANCEL</Text>
+                  <View style={styles.buttonBottom} />
+                </TouchableOpacity>
+                
+                <TouchableOpacity 
+                  style={[styles.modalButton, styles.logoutButton]}
+                  onPress={handleLogout}
+                >
+                  <Text style={styles.logoutButtonText}>LOG OUT</Text>
+                  <View style={[styles.buttonBottom, { backgroundColor: '#B01B10' }]} />
+                </TouchableOpacity>
+              </View>
+            </View>
+          </View>
+        </View>
+      </Modal>
     </SafeAreaView>
   );
 }
@@ -179,5 +242,89 @@ const styles = StyleSheet.create({
     shadowOffset: { width: 0, height: 2 },
     shadowOpacity: 0.3,
     shadowRadius: 3,
+  },
+  // Modal styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0, 0, 0, 0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  modalContent: {
+    width: '80%',
+    backgroundColor: '#FFFFFF',
+    borderRadius: 8,
+    borderWidth: 3,
+    borderColor: '#0C0A00',
+    overflow: 'hidden',
+  },
+  modalStudsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: '#FFE500',
+    padding: 6,
+    borderBottomWidth: 2,
+    borderBottomColor: '#0C0A00',
+  },
+  modalBody: {
+    padding: 24,
+    alignItems: 'center',
+  },
+  modalTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#0C0A00',
+    marginTop: 16,
+    marginBottom: 8,
+    fontFamily: Platform.OS === 'ios' ? 'Futura-Bold' : 'sans-serif-condensed',
+  },
+  modalText: {
+    fontSize: 16,
+    color: '#0C0A00',
+    marginBottom: 24,
+    textAlign: 'center',
+    opacity: 0.8,
+  },
+  modalButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    width: '100%',
+  },
+  modalButton: {
+    width: '48%',
+    height: 50,
+    borderRadius: 6,
+    overflow: 'hidden',
+    position: 'relative',
+  },
+  cancelButton: {
+    backgroundColor: '#E0E0E0',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  cancelButtonText: {
+    color: '#0C0A00',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  logoutButton: {
+    backgroundColor: '#FF3A2F',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  logoutButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
+  },
+  buttonBottom: {
+    width: '94%',
+    height: 6,
+    backgroundColor: '#AAAAAA',
+    position: 'absolute',
+    bottom: 0,
+    alignSelf: 'center',
+    borderBottomLeftRadius: 6,
+    borderBottomRightRadius: 6,
   },
 });

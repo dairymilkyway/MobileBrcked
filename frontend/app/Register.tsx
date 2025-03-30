@@ -57,7 +57,7 @@ export default function RegisterScreen() {
       });
     };
   }, []);
-  const API_BASE_URL = 'http://192.168.1.118:9000/api';
+  const API_BASE_URL = 'http://192.168.0.251:9000/api';
 
   const handleRegister = async () => {
     // Button press animation
