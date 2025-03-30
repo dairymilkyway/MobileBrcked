@@ -1,7 +1,6 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, Image, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, Modal } from 'react-native';
 import { useRouter } from 'expo-router';
-import { IconSymbol } from './ui/IconSymbol';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
@@ -12,7 +11,7 @@ export default function UserHeader({ section = 'Home' }) {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // LEGO studs for the top of bricks
-  const renderStuds = (count: number) => {
+  const renderStuds = (count) => {
     const studs = [];
     for (let i = 0; i < count; i++) {
       studs.push(
@@ -53,18 +52,15 @@ export default function UserHeader({ section = 'Home' }) {
             style={styles.legoButton}
             onPress={() => alert('Profile feature coming soon')}
           >
-            <Image 
-              source={{ uri: 'https://cdn.iconscout.com/icon/free/png-256/free-lego-figure-head-icon-download-in-svg-png-gif-file-formats--puzzle-game-baby-pack-people-icons-6805444.png' }}
-              style={styles.legoHeadIcon}
-            />
+            <MaterialCommunityIcons name="account" size={22} color="#FFFFFF" />
             <View style={styles.buttonStud} />
           </TouchableOpacity>
           <TouchableOpacity 
             style={[styles.legoButton, { backgroundColor: '#FFC500' }]}
             onPress={() => alert('Notifications feature coming soon')}
           >
-            <IconSymbol 
-              name="bell.fill" 
+            <MaterialCommunityIcons 
+              name="bell" 
               size={22} 
               color="#FFFFFF" 
             />
@@ -74,8 +70,8 @@ export default function UserHeader({ section = 'Home' }) {
             style={[styles.legoButton, { backgroundColor: '#4CAF50' }]}
             onPress={() => alert('Cart feature coming soon')}
           >
-            <IconSymbol 
-              name="cart.fill" 
+            <MaterialCommunityIcons 
+              name="cart" 
               size={22} 
               color="#FFFFFF" 
             />
@@ -197,7 +193,11 @@ const styles = StyleSheet.create({
     fontSize: 22,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    fontFamily: Platform.OS === 'ios' ? 'Futura-Bold' : 'sans-serif-condensed',
+    fontFamily: Platform.select({
+      ios: 'Futura-Bold',
+      android: 'sans-serif-condensed',
+      default: 'System'
+    }),
     letterSpacing: 1,
     marginRight: 8,
   },
@@ -205,7 +205,11 @@ const styles = StyleSheet.create({
     fontSize: 18,
     fontWeight: 'bold',
     color: '#FFFFFF',
-    fontFamily: Platform.OS === 'ios' ? 'Futura-Medium' : 'sans-serif-medium',
+    fontFamily: Platform.select({
+      ios: 'Futura-Medium',
+      android: 'sans-serif-medium',
+      default: 'System'
+    }),
     textTransform: 'uppercase',
   },
   legoButton: {
@@ -220,11 +224,17 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     position: 'relative',
-  },
-  legoHeadIcon: {
-    width: 22,
-    height: 22,
-    tintColor: '#FFFFFF', // This will make the icon white
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 1 },
+        shadowOpacity: 0.2,
+        shadowRadius: 1,
+      },
+      android: {
+        elevation: 2,
+      },
+    }),
   },
   buttonStud: {
     position: 'absolute',
@@ -238,10 +248,17 @@ const styles = StyleSheet.create({
     right: 13,
   },
   logoShadow: {
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 2 },
-    shadowOpacity: 0.3,
-    shadowRadius: 3,
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 2 },
+        shadowOpacity: 0.3,
+        shadowRadius: 3,
+      },
+      android: {
+        elevation: 4,
+      },
+    }),
   },
   // Modal styles
   modalOverlay: {
@@ -257,6 +274,17 @@ const styles = StyleSheet.create({
     borderWidth: 3,
     borderColor: '#0C0A00',
     overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 4 },
+        shadowOpacity: 0.3,
+        shadowRadius: 6,
+      },
+      android: {
+        elevation: 8,
+      },
+    }),
   },
   modalStudsContainer: {
     flexDirection: 'row',
@@ -276,7 +304,11 @@ const styles = StyleSheet.create({
     color: '#0C0A00',
     marginTop: 16,
     marginBottom: 8,
-    fontFamily: Platform.OS === 'ios' ? 'Futura-Bold' : 'sans-serif-condensed',
+    fontFamily: Platform.select({
+      ios: 'Futura-Bold',
+      android: 'sans-serif-condensed',
+      default: 'System'
+    }),
   },
   modalText: {
     fontSize: 16,
@@ -284,6 +316,11 @@ const styles = StyleSheet.create({
     marginBottom: 24,
     textAlign: 'center',
     opacity: 0.8,
+    fontFamily: Platform.select({
+      ios: 'System',
+      android: 'Roboto',
+      default: 'System'
+    }),
   },
   modalButtons: {
     flexDirection: 'row',
