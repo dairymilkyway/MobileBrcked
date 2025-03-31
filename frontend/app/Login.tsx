@@ -16,6 +16,7 @@ import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage'; // ✅ Import AsyncStorage
+import { API_BASE_URL } from '@/env';
 
 const { width } = Dimensions.get('window');
 
@@ -72,7 +73,6 @@ export default function LoginScreen() {
       });
     };
   }, []);
-  const API_BASE_URL = 'http://192.168.0.251:9000/api';
 
   // ✅ Login handler with AsyncStorage token saving
   const handleLogin = async () => {

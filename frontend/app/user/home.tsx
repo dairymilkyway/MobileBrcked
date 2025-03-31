@@ -15,11 +15,10 @@ import { useRouter } from 'expo-router';
 import UserHeader from '@/components/UserHeader';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import ProductCard from '@/components/ProductCard';
-
+import { API_BASE_URL } from '@/env';
 // API Configuration
 //const API_BASE_URL = 'http://10.0.2.2:9000/api/products'; // For Android emulator pointing to localhost
 // const API_BASE_URL = 'http://localhost:9000/api/products'; // For iOS simulator
-const API_BASE_URL = 'http://192.168.1.143:9000/api/products'; // For physical device - update with your IP
 
 // Request timeout in milliseconds
 const FETCH_TIMEOUT = 10000;
@@ -80,8 +79,9 @@ export default function Home() {
       setLoading(true);
       setCurrentCategory(null);
       
-      console.log(`Fetching products from: ${API_BASE_URL}`);
-      const response = await fetchWithTimeout(API_BASE_URL);
+      console.log(`Fetching products from: ${API_BASE_URL}/products`);
+      const response = await fetchWithTimeout(`${API_BASE_URL}/products`);
+
       
       if (!response.ok) {
         const errorData = await response.json().catch(() => ({}));
@@ -122,7 +122,7 @@ export default function Home() {
       setCurrentCategory(null);
       
       // Use proper endpoint for search
-      const apiUrl = `${API_BASE_URL}/search/${encodeURIComponent(searchQuery)}`;
+      const apiUrl = `${API_BASE_URL}/product/search/${encodeURIComponent(searchQuery)}`;
       console.log(`Searching products from: ${apiUrl}`);
       
       const response = await fetchWithTimeout(apiUrl);
@@ -162,7 +162,7 @@ export default function Home() {
       setCurrentCategory(category);
       
       // Use proper endpoint for category filtering
-      const apiUrl = `${API_BASE_URL}/category/${category}`;
+      const apiUrl = `${API_BASE_URL}/product/category/${category}`;
       console.log(`Fetching ${category} products from: ${apiUrl}`);
       
       const response = await fetchWithTimeout(apiUrl);

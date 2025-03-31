@@ -12,9 +12,7 @@ import {
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
-
-// API Configuration - should match what's in home.tsx
-const API_BASE_URL = 'http://192.168.1.143:9000/api/products';
+import { API_BASE_URL } from '@/env';
 const FETCH_TIMEOUT = 10000;
 
 interface Product {
@@ -62,7 +60,7 @@ export default function ProductDetail() {
     try {
       setLoading(true);
       
-      const apiUrl = `${API_BASE_URL}/${id}`;
+      const apiUrl = `${API_BASE_URL}/products/${id}`;
       console.log(`Fetching product details from: ${apiUrl}`);
       
       const response = await fetchWithTimeout(apiUrl);
