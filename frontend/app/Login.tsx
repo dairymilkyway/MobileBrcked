@@ -37,7 +37,7 @@ export default function LoginScreen() {
 
       if (token) {
         if (role === 'admin') {
-          router.replace('/admin/admindashboard');
+          router.replace('/admin/dashboard');
         } else {
           router.replace('/user/home');
         }
