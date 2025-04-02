@@ -12,12 +12,15 @@ const mongoose = require('mongoose');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const path = require('path');
+const fs = require('fs');
 const User = require('./models/User');
 // Import the product routes
 const productRoutes = require('./apis/ProductAPI');
 const userRoutes = require('./apis/UserAPI');
 const authenticateToken = require('./middleware/auth'); // ✅ Import auth middleware
+const { generateToken, blacklistToken, cleanupExpiredTokens } = require('./utils/tokenManager');
 
+// Initialize express
 const app = express();
 app.use(express.json());
 
@@ -33,67 +36,302 @@ app.use(cors(corsOptions));
 // Serve static files from the uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
-// ✅ MongoDB Connection
-mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
-  .then(() => console.log('✅ MongoDB connected'))
-  .catch((err) => console.error('❌ Error connecting to MongoDB:', err));
-
-// ✅ Register route
-app.post('/api/register', async (req, res) => {
+// Initialize SQLite database and MongoDB connections in parallel
+const initDatabases = async () => {
+  // Start MongoDB connection
   try {
-    const { username, email, password, role = 'user' } = req.body;
-    const user = new User({ username, email, password, role });
-    await user.save();
-    res.status(201).json({ message: 'User registered successfully' });
+    await mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true });
+    console.log('✅ MongoDB connected');
   } catch (err) {
-    res.status(400).json({ error: err.message });
+    console.error('❌ Error connecting to MongoDB:', err);
   }
-});
 
-// ✅ Login route
-app.post('/api/login', async (req, res) => {
+  // Initialize SQLite database by importing the Token model
   try {
-    const { email, password } = req.body;
-    const user = await User.findOne({ email });
-    if (!user || !(await user.comparePassword(password))) {
-      return res.status(401).json({ error: 'Invalid credentials' });
+    // First check if the file exists and is not empty
+    const dbPath = path.join(__dirname, 'database', 'tokens.sqlite');
+    const needsRebuild = !fs.existsSync(dbPath) || fs.statSync(dbPath).size < 100;
+    
+    if (needsRebuild) {
+      console.log('SQLite database needs initialization...');
+      // Import dynamically to avoid circular dependencies
+      const { Sequelize, DataTypes } = require('sequelize');
+      const sequelize = new Sequelize({
+        dialect: 'sqlite',
+        storage: dbPath,
+        logging: false
+      });
+      
+      // Define Token model
+      const Token = sequelize.define('Token', {
+        userId: {
+          type: DataTypes.STRING,
+          allowNull: false
+        },
+        token: {
+          type: DataTypes.STRING,
+          allowNull: false,
+          unique: true
+        },
+        expiresAt: {
+          type: DataTypes.DATE,
+          allowNull: false
+        },
+        blacklisted: {
+          type: DataTypes.BOOLEAN,
+          defaultValue: false
+        }
+      });
+      
+      // Force sync to create tables
+      await Token.sync({ force: true });
+      
+      console.log('✅ SQLite database initialized successfully');
+    } else {
+      // Just importing the model will initialize it
+      require('./models/Token');
+      console.log('✅ SQLite database connected');
     }
-
-    // ✅ Generate JWT token with 24 hour expiration
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '24h' });
-    res.json({ token, role: user.role });
-  } catch (err) {
-    res.status(500).json({ error: err.message });
+  } catch (error) {
+    console.error('❌ Error initializing SQLite database:', error);
   }
-});
+};
 
-// Use product routes
-app.use('/api/products', productRoutes);
-
-// Use user routes
-app.use('/api/users', userRoutes);
-
-// ✅ Protected route example
-app.get('/api/profile', authenticateToken, async (req, res) => {
-  try {
-    const user = await User.findById(req.user.id).select('-password');
-    if (!user) {
-      return res.status(404).json({ error: 'User not found' });
+// Initialize databases before starting server
+initDatabases().then(() => {
+  // ✅ Register route
+  app.post('/api/register', async (req, res) => {
+    try {
+      const { username, email, password, role = 'user' } = req.body;
+      const user = new User({ username, email, password, role });
+      await user.save();
+      res.status(201).json({ message: 'User registered successfully' });
+    } catch (err) {
+      res.status(400).json({ error: err.message });
     }
-    res.json(user);
-  } catch (err) {
-    res.status(500).json({ error: err.message });
-  }
-});
+  });
 
-// ✅ Admin-only route
-app.get('/api/admin/data', authenticateToken, (req, res) => {
-  if (req.user.role !== 'admin') {
-    return res.status(403).json({ error: 'Access denied. Admins only.' });
-  }
-  res.json({ message: 'Welcome Admin! Here is the secret data.' });
-});
+  // ✅ Login route
+  app.post('/api/login', async (req, res) => {
+    try {
+      const { email, password } = req.body;
+      const user = await User.findOne({ email });
+      if (!user || !(await user.comparePassword(password))) {
+        return res.status(401).json({ error: 'Invalid credentials' });
+      }
 
-// ✅ Start server
-const PORT = process.env.PORT || 9000;
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+      // ✅ Generate JWT token with 24 hour expiration and store in SQLite
+      const token = await generateToken({ 
+        id: user._id.toString(), // Convert MongoDB ObjectId to string
+        role: user.role 
+      }, '24h');
+      res.json({ token, role: user.role });
+    } catch (err) {
+      console.error('Login error:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // ✅ Logout route
+  app.post('/api/logout', authenticateToken, async (req, res) => {
+    try {
+      const authHeader = req.headers['authorization'];
+      const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
+      
+      // Blacklist the token in SQLite
+      await blacklistToken(token);
+      res.json({ message: 'Logged out successfully' });
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Use product routes
+  app.use('/api/products', productRoutes);
+
+  // Use user routes
+  app.use('/api/users', userRoutes);
+
+  // ✅ Protected route example
+  app.get('/api/profile', authenticateToken, async (req, res) => {
+    try {
+      const user = await User.findById(req.user.id).select('-password');
+      if (!user) {
+        return res.status(404).json({ error: 'User not found' });
+      }
+      res.json(user);
+    } catch (err) {
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Debug route to check token storage (remove in production)
+  app.get('/api/debug/tokens', async (req, res) => {
+    try {
+      const Token = require('./models/Token');
+      const tokens = await Token.findAll({
+        limit: 10,
+        order: [['createdAt', 'DESC']]
+      });
+      
+      // Return sanitized token info (don't expose full tokens)
+      const sanitizedTokens = tokens.map(t => ({
+        id: t.id,
+        userId: t.userId,
+        expiresAt: t.expiresAt,
+        blacklisted: t.blacklisted,
+        createdAt: t.createdAt,
+        tokenPreview: t.token ? t.token.substring(0, 10) + '...' : 'null'
+      }));
+      
+      res.json({ count: tokens.length, tokens: sanitizedTokens });
+    } catch (err) {
+      console.error('Error fetching tokens:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
+
+  // Admin route with HTML interface to view tokens
+  app.get('/admin/tokens', async (req, res) => {
+    try {
+      const Token = require('./models/Token');
+      const tokens = await Token.findAll({
+        order: [['createdAt', 'DESC']]
+      });
+      
+      // Count expired tokens
+      const now = new Date();
+      const expiredCount = tokens.filter(t => new Date(t.expiresAt) < now).length;
+      
+      // Format tokens for display
+      const formattedTokens = tokens.map(t => {
+        const isExpired = new Date(t.expiresAt) < now;
+        return {
+          id: t.id,
+          userId: t.userId,
+          tokenPreview: t.token ? t.token.substring(0, 15) + '...' : 'null',
+          expiresAt: new Date(t.expiresAt).toLocaleString(),
+          blacklisted: t.blacklisted ? 'Yes' : 'No',
+          expired: isExpired ? 'Yes' : 'No',
+          createdAt: new Date(t.createdAt).toLocaleString()
+        };
+      });
+      
+      // Return HTML page
+      const html = `
+      <!DOCTYPE html>
+      <html>
+        <head>
+          <title>Token Database Admin</title>
+          <style>
+            body { font-family: Arial, sans-serif; margin: 20px; }
+            h1 { color: #333; }
+            table { border-collapse: collapse; width: 100%; margin-top: 20px; }
+            th, td { border: 1px solid #ddd; padding: 8px; text-align: left; }
+            th { background-color: #f2f2f2; }
+            tr:nth-child(even) { background-color: #f9f9f9; }
+            .blacklisted, .expired { color: red; }
+            .valid { color: green; }
+            .actions { margin: 20px 0; }
+            .button {
+              display: inline-block;
+              padding: 10px 15px;
+              background-color: #4CAF50;
+              color: white;
+              text-decoration: none;
+              border-radius: 4px;
+            }
+            .stats {
+              display: flex;
+              gap: 20px;
+              margin-bottom: 20px;
+            }
+            .stat-box {
+              background-color: #f5f5f5;
+              padding: 15px;
+              border-radius: 5px;
+              box-shadow: 0 2px 4px rgba(0,0,0,0.1);
+            }
+          </style>
+        </head>
+        <body>
+          <h1>Token Database Admin</h1>
+          
+          <div class="stats">
+            <div class="stat-box">
+              <h3>Total Tokens</h3>
+              <p>${tokens.length}</p>
+            </div>
+            <div class="stat-box">
+              <h3>Expired Tokens</h3>
+              <p>${expiredCount}</p>
+            </div>
+            <div class="stat-box">
+              <h3>Blacklisted Tokens</h3>
+              <p>${tokens.filter(t => t.blacklisted).length}</p>
+            </div>
+          </div>
+          
+          <div class="actions">
+            <a href="/admin/cleanup-tokens" class="button">Clean Up Expired Tokens</a>
+          </div>
+          
+          <table>
+            <tr>
+              <th>ID</th>
+              <th>User ID</th>
+              <th>Token (preview)</th>
+              <th>Expires At</th>
+              <th>Blacklisted</th>
+              <th>Expired</th>
+              <th>Created At</th>
+            </tr>
+            ${formattedTokens.map(t => `
+              <tr>
+                <td>${t.id}</td>
+                <td>${t.userId}</td>
+                <td>${t.tokenPreview}</td>
+                <td>${t.expiresAt}</td>
+                <td class="${t.blacklisted === 'Yes' ? 'blacklisted' : 'valid'}">${t.blacklisted}</td>
+                <td class="${t.expired === 'Yes' ? 'expired' : 'valid'}">${t.expired}</td>
+                <td>${t.createdAt}</td>
+              </tr>
+            `).join('')}
+          </table>
+        </body>
+      </html>
+      `;
+      
+      res.send(html);
+    } catch (err) {
+      console.error('Error generating token admin page:', err);
+      res.status(500).send('Error loading token database');
+    }
+  });
+
+  // Admin route to manually clean up expired tokens
+  app.get('/admin/cleanup-tokens', async (req, res) => {
+    try {
+      await cleanupExpiredTokens();
+      res.redirect('/admin/tokens');
+    } catch (err) {
+      console.error('Error during manual token cleanup:', err);
+      res.status(500).send('Error cleaning up tokens');
+    }
+  });
+
+  // ✅ Admin-only route
+  app.get('/api/admin/data', authenticateToken, (req, res) => {
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({ error: 'Access denied. Admins only.' });
+    }
+    res.json({ message: 'Welcome Admin! Here is the secret data.' });
+  });
+
+  // Schedule token cleanup to run every day
+  setInterval(cleanupExpiredTokens, 24 * 60 * 60 * 1000);
+
+  // ✅ Start server
+  const PORT = process.env.PORT || 9000;
+  app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+});
