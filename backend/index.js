@@ -1,6 +1,14 @@
+// Load environment variables right at the beginning to ensure they're available throughout the app
+require('dotenv').config();
+
+// Debug Cloudinary configuration 
+console.log('Cloudinary Config Check:');
+console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME);
+console.log('CLOUDINARY_API_KEY exists:', !!process.env.CLOUDINARY_API_KEY);
+console.log('CLOUDINARY_API_SECRET exists:', !!process.env.CLOUDINARY_API_SECRET);
+
 const express = require('express');
 const mongoose = require('mongoose');
-const dotenv = require('dotenv');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const path = require('path');
@@ -8,8 +16,6 @@ const User = require('./models/User');
 // Import the product routes
 const productRoutes = require('./apis/ProductAPI');
 const authenticateToken = require('./middleware/auth'); // ✅ Import auth middleware
-
-dotenv.config();
 
 const app = express();
 app.use(express.json());

@@ -267,42 +267,51 @@ const CreateProductScreen = () => {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Product Images</Text>
-              <View style={styles.imagesContainer}>
-                {formData.images && formData.images.map((image, index) => (
-                  <View key={index} style={styles.imagePreview}>
-                    <Image source={{ uri: image.uri }} style={styles.imageThumb} />
-                    <TouchableOpacity
-                      style={styles.removeImageBtn}
-                      onPress={() => removeImage(index)}
-                    >
-                      <Ionicons name="close-circle" size={24} color="#E3000B" />
-                    </TouchableOpacity>
-                  </View>
-                ))}
+              <Text style={styles.label}>Product Images (Max: 5)</Text>
+              <Text style={styles.imageNote}>Images will be uploaded to Cloudinary for secure storage and fast delivery</Text>
+              
+              <View style={styles.uploadButtonsContainer}>
+                <TouchableOpacity 
+                  style={styles.uploadButton}
+                  onPress={handlePickImages}
+                >
+                  <Ionicons name="image-outline" size={24} color="#fff" />
+                  <Text style={styles.uploadButtonText}>Choose Images</Text>
+                </TouchableOpacity>
                 
-                {(!formData.images || formData.images.length < 5) && (
-                  <View style={styles.imageActions}>
-                    <TouchableOpacity
-                      style={[styles.imageBtn, styles.galleryBtn]}
-                      onPress={handlePickImages}
-                    >
-                      <Ionicons name="images" size={24} color="#fff" />
-                      <Text style={styles.imageBtnText}>Gallery</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.imageBtn, styles.cameraBtn]}
-                      onPress={handleTakePicture}
-                    >
-                      <Ionicons name="camera" size={24} color="#fff" />
-                      <Text style={styles.imageBtnText}>Camera</Text>
-                    </TouchableOpacity>
-                  </View>
-                )}
+                <TouchableOpacity 
+                  style={styles.uploadButton}
+                  onPress={handleTakePicture}
+                >
+                  <Ionicons name="camera-outline" size={24} color="#fff" />
+                  <Text style={styles.uploadButtonText}>Take Photo</Text>
+                </TouchableOpacity>
               </View>
-              <Text style={styles.imagesHelpText}>
-                You can upload up to 5 images ({formData.images ? formData.images.length : 0}/5)
-              </Text>
+              
+              {/* Show selected images */}
+              {formData.images && formData.images.length > 0 && (
+                <View style={styles.selectedImagesContainer}>
+                  <Text style={styles.selectedImagesText}>
+                    {formData.images.length} {formData.images.length === 1 ? 'image' : 'images'} selected
+                  </Text>
+                  <ScrollView horizontal>
+                    {formData.images.map((image, index) => (
+                      <View key={index} style={styles.imageContainer}>
+                        <Image 
+                          source={{ uri: image.uri }} 
+                          style={styles.previewImage} 
+                        />
+                        <TouchableOpacity
+                          style={styles.removeImageButton}
+                          onPress={() => removeImage(index)}
+                        >
+                          <Ionicons name="close-circle" size={24} color="#e74c3c" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
             </View>
 
             <TouchableOpacity
@@ -474,6 +483,63 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     fontSize: 16,
     marginLeft: 8,
+  },
+  imageNote: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 10,
+    fontStyle: 'italic',
+  },
+  uploadButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3498db',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginVertical: 4,
+    width: '48%',
+  },
+  uploadButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    marginLeft: 4,
+    fontSize: 12,
+  },
+  selectedImagesContainer: {
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  selectedImagesText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    color: '#555',
+  },
+  imageContainer: {
+    width: 100,
+    height: 100,
+    margin: 5,
+    position: 'relative',
+  },
+  previewImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: -10,
+    right: -10,
+    backgroundColor: '#fff',
+    borderRadius: 12,
   },
 });
 

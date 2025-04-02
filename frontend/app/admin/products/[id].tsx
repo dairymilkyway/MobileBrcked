@@ -411,85 +411,105 @@ const EditProductScreen = () => {
             </View>
 
             <View style={styles.formGroup}>
-              <View style={styles.imagesHeader}>
-                <Text style={styles.label}>Current Images</Text>
-                {product?.imageURL && product.imageURL.length > 0 && (
-                  <TouchableOpacity 
-                    style={[styles.toggleButton, formData.removeImages && styles.toggleButtonActive]}
+              <Text style={styles.label}>Product Images (Max: 5)</Text>
+              <Text style={styles.imageNote}>Images are stored on Cloudinary for secure storage and fast delivery</Text>
+              
+              {/* Current product images */}
+              {product && product.imageURL && product.imageURL.length > 0 && !formData.removeImages && (
+                <View style={styles.currentImagesContainer}>
+                  <View style={styles.sectionHeader}>
+                    <Text style={styles.sectionTitle}>Current Images</Text>
+                    <TouchableOpacity
+                      style={styles.toggleButton}
+                      onPress={handleToggleExistingImages}
+                    >
+                      <Text style={styles.toggleButtonText}>Remove All</Text>
+                    </TouchableOpacity>
+                  </View>
+                  
+                  <ScrollView horizontal style={styles.imagesScroll}>
+                    {product.imageURL.map((imageUrl, index) => (
+                      <View key={index} style={styles.imageContainer}>
+                        <Image 
+                          source={{ 
+                            uri: imageUrl.startsWith('/uploads') 
+                              ? `${API_BASE_URL}${imageUrl}` 
+                              : imageUrl 
+                          }} 
+                          style={styles.productImage} 
+                        />
+                        <TouchableOpacity
+                          style={styles.removeImageButton}
+                          onPress={() => handleRemoveCurrentImage(index)}
+                        >
+                          <Ionicons name="close-circle" size={24} color="#e74c3c" />
+                        </TouchableOpacity>
+                      </View>
+                    ))}
+                  </ScrollView>
+                </View>
+              )}
+              
+              {/* When all current images are set to be removed */}
+              {formData.removeImages && (
+                <View style={styles.removedImagesNotice}>
+                  <Text style={styles.removedImagesText}>All current images will be removed</Text>
+                  <TouchableOpacity
+                    style={styles.undoButton}
                     onPress={handleToggleExistingImages}
                   >
-                    <Text style={formData.removeImages ? styles.toggleTextActive : styles.toggleText}>
-                      {formData.removeImages ? 'Keep Images' : 'Remove All'}
-                    </Text>
+                    <Text style={styles.undoButtonText}>Keep Current Images</Text>
                   </TouchableOpacity>
-                )}
-              </View>
-              
-              {!formData.removeImages && product?.imageURL && product.imageURL.length > 0 ? (
-                <ScrollView 
-                  horizontal 
-                  showsHorizontalScrollIndicator={false}
-                  style={styles.currentImagesScroll}
-                >
-                  {product.imageURL.map((url, index) => (
-                    <View key={index} style={styles.imagePreview}>
-                      <Image 
-                        source={{ uri: url.startsWith('http') ? url : `${API_BASE_URL.replace('/api', '')}${url}` }} 
-                        style={styles.imageThumb} 
-                      />
-                      <TouchableOpacity
-                        style={styles.removeImageBtn}
-                        onPress={() => handleRemoveCurrentImage(index)}
-                      >
-                        <View style={styles.removeIconCircle}>
-                          <Ionicons name="close" size={18} color="#fff" />
-                        </View>
-                      </TouchableOpacity>
-                    </View>
-                  ))}
-                </ScrollView>
-              ) : (
-                <Text style={styles.noImagesText}>No current images</Text>
+                </View>
               )}
-
-              <Text style={styles.label}>New Images</Text>
-              <View style={styles.imagesContainer}>
-                {formData.images && formData.images.map((image, index) => (
-                  <View key={index} style={styles.imagePreview}>
-                    <Image source={{ uri: image.uri }} style={styles.imageThumb} />
-                    <TouchableOpacity
-                      style={styles.removeImageBtn}
-                      onPress={() => removeImage(index)}
-                    >
-                      <View style={styles.removeIconCircle}>
-                        <Ionicons name="close" size={18} color="#fff" />
-                      </View>
-                    </TouchableOpacity>
-                  </View>
-                ))}
+              
+              {/* Add new images section */}
+              <View style={styles.newImagesSection}>
+                <Text style={styles.sectionTitle}>Add New Images</Text>
                 
-                {(!formData.images || formData.images.length < 5) && (
-                  <View style={styles.imageActions}>
-                    <TouchableOpacity
-                      style={[styles.imageBtn, styles.galleryBtn]}
-                      onPress={handlePickImages}
-                    >
-                      <Ionicons name="images" size={24} color="#fff" />
-                      <Text style={styles.imageBtnText}>Gallery</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity
-                      style={[styles.imageBtn, styles.cameraBtn]}
-                      onPress={handleTakePicture}
-                    >
-                      <Ionicons name="camera" size={24} color="#fff" />
-                      <Text style={styles.imageBtnText}>Camera</Text>
-                    </TouchableOpacity>
+                <View style={styles.uploadButtonsContainer}>
+                  <TouchableOpacity 
+                    style={styles.uploadButton}
+                    onPress={handlePickImages}
+                  >
+                    <Ionicons name="image-outline" size={24} color="#fff" />
+                    <Text style={styles.uploadButtonText}>Choose Images</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={styles.uploadButton}
+                    onPress={handleTakePicture}
+                  >
+                    <Ionicons name="camera-outline" size={24} color="#fff" />
+                    <Text style={styles.uploadButtonText}>Take Photo</Text>
+                  </TouchableOpacity>
+                </View>
+                
+                {/* Show selected new images */}
+                {formData.images && formData.images.length > 0 && (
+                  <View style={styles.selectedImagesContainer}>
+                    <Text style={styles.selectedImagesText}>
+                      {formData.images.length} new {formData.images.length === 1 ? 'image' : 'images'} selected
+                    </Text>
+                    <ScrollView horizontal>
+                      {formData.images.map((image, index) => (
+                        <View key={index} style={styles.imageContainer}>
+                          <Image 
+                            source={{ uri: image.uri }} 
+                            style={styles.previewImage} 
+                          />
+                          <TouchableOpacity
+                            style={styles.removeImageButton}
+                            onPress={() => removeImage(index)}
+                          >
+                            <Ionicons name="close-circle" size={24} color="#e74c3c" />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </ScrollView>
                   </View>
                 )}
               </View>
-              <Text style={styles.imagesHelpText}>
-                You can upload up to 5 total images
-              </Text>
             </View>
 
             <TouchableOpacity
@@ -604,7 +624,7 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     alignItems: 'center',
   },
-  toggleButton: {
+  oldToggleButton: {
     backgroundColor: '#f0f0f0',
     paddingVertical: 4,
     paddingHorizontal: 8,
@@ -722,6 +742,147 @@ const styles = StyleSheet.create({
     marginTop: 16,
     color: '#666',
     fontSize: 16,
+  },
+  imageNote: {
+    fontSize: 12,
+    color: '#666',
+    marginBottom: 10,
+    fontStyle: 'italic',
+  },
+  
+  currentImagesContainer: {
+    marginBottom: 20,
+  },
+  
+  sectionHeader: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  
+  sectionTitle: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#333',
+  },
+  
+  toggleButton: {
+    backgroundColor: '#f8d7da',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  
+  toggleButtonText: {
+    color: '#721c24',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  
+  imagesScroll: {
+    flexDirection: 'row',
+  },
+  
+  removedImagesNotice: {
+    backgroundColor: '#f8d7da',
+    padding: 12,
+    borderRadius: 4,
+    marginBottom: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
+  },
+  
+  removedImagesText: {
+    color: '#721c24',
+    fontSize: 14,
+    flex: 1,
+  },
+  
+  undoButton: {
+    backgroundColor: '#e2e3e5',
+    paddingHorizontal: 10,
+    paddingVertical: 4,
+    borderRadius: 4,
+  },
+  
+  undoButtonText: {
+    color: '#383d41',
+    fontSize: 12,
+    fontWeight: '500',
+  },
+  
+  newImagesSection: {
+    marginTop: 10,
+  },
+  
+  uploadButtonsContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 10,
+  },
+  
+  uploadButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#3498db',
+    borderRadius: 8,
+    paddingVertical: 8,
+    paddingHorizontal: 12,
+    marginVertical: 4,
+    width: '48%',
+  },
+  
+  uploadButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+    marginLeft: 4,
+    fontSize: 12,
+  },
+  
+  selectedImagesContainer: {
+    marginTop: 10,
+    marginBottom: 10,
+  },
+  
+  selectedImagesText: {
+    fontSize: 14,
+    fontWeight: 'bold',
+    marginBottom: 8,
+    color: '#555',
+  },
+  
+  imageContainer: {
+    width: 100,
+    height: 100,
+    margin: 5,
+    position: 'relative',
+  },
+  
+  productImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  
+  previewImage: {
+    width: '100%',
+    height: '100%',
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#ddd',
+  },
+  
+  removeImageButton: {
+    position: 'absolute',
+    top: -10,
+    right: -10,
+    backgroundColor: '#fff',
+    borderRadius: 12,
   },
 });
 
