@@ -320,14 +320,79 @@ export const getUserProfile = async () => {
   }
 };
 
+// Login user 
+export const loginUser = async (email: string, password: string) => {
+  try {
+    console.log('Attempting login with:', email);
+    
+    const response = await fetch(`${API_BASE_URL}/api/login`, {
+      method: 'POST',
+      headers: {
+        'Content-Type': 'application/json',
+      },
+      body: JSON.stringify({ email, password }),
+    });
+    
+    const data = await response.json();
+    console.log('Login response status:', response.status);
+    console.log('Login response role:', data.role);
+    
+    if (!response.ok) {
+      throw new Error(data.error || 'Login failed');
+    }
+    
+    // Store the token and role
+    await AsyncStorage.setItem('token', data.token);
+    await AsyncStorage.setItem('userToken', data.token); // For backward compatibility
+    await AsyncStorage.setItem('userRole', data.role);
+    
+    return { 
+      success: true, 
+      role: data.role 
+    };
+  } catch (error) {
+    console.error('Login failed:', error);
+    // Clear any partial authentication state
+    await handleAuthError();
+    throw error;
+  }
+};
+
 // Logout user
 export const logout = async () => {
   try {
     console.log('Logging out user');
-    await handleAuthError(); // Reuse our auth error handler to clear tokens
+    const token = await getToken();
+    
+    if (token) {
+      try {
+        // Call the server-side logout endpoint to blacklist the token
+        const response = await fetch(`${API_BASE_URL}/api/logout`, {
+          method: 'POST',
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json',
+          },
+        });
+        
+        console.log('Logout response status:', response.status);
+      } catch (error) {
+        console.error('Error calling logout endpoint:', error);
+        // Continue with local logout even if server-side logout fails
+      }
+    }
+    
+    // Clear local storage regardless of server response
+    await handleAuthError();
     return true;
   } catch (error) {
     console.error('Error during logout:', error);
+    // Make sure local storage is cleared even if there's an error
+    try {
+      await handleAuthError();
+    } catch (err) {
+      console.error('Failed to clear auth data during error handling:', err);
+    }
     return false;
   }
 }; 

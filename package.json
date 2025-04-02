@@ -1,7 +1,15 @@
 {
+  "name": "brcked-mobile",
+  "version": "1.0.0",
+  "description": "Brcked Mobile Application with MongoDB and SQLite",
+  "main": "index.js",
+  "scripts": {
+    "backend": "cd backend && npm run dev",
+    "frontend": "cd frontend && npm start",
+    "init-db": "cd backend && npm run init-db",
+    "start": "concurrently \"npm run backend\" \"npm run frontend\""
+  },
   "dependencies": {
-    "@react-native-async-storage/async-storage": "^2.1.2",
-    "bcrypt": "^5.1.1",
-    "jsonwebtoken": "^9.0.2"
+    "concurrently": "^8.2.2"
   }
-}
+} 
