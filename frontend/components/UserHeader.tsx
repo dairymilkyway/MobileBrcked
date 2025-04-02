@@ -5,13 +5,13 @@ import { useColorScheme } from '@/hooks/useColorScheme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
-export default function UserHeader({ section = 'Home' }) {
+export default function UserHeader({ section = 'Home', compact = false }) {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
 
   // LEGO studs for the top of bricks
-  const renderStuds = (count) => {
+  const renderStuds = (count: number) => {
     const studs = [];
     for (let i = 0; i < count; i++) {
       studs.push(
@@ -36,39 +36,54 @@ export default function UserHeader({ section = 'Home' }) {
     }
   };
 
+  const navigateToHome = () => {
+    router.push('/user/home');  // Navigate to the home screen
+  };
+
   return (
-    <SafeAreaView style={styles.safeArea}>
-      <View style={styles.container}>
+    <SafeAreaView style={[styles.safeArea, compact && styles.safeAreaCompact]}>
+      <View style={[styles.container, compact && styles.containerCompact]}>
         <View style={styles.leftSection}>
-          <View style={styles.logoContainer}>
+          <TouchableOpacity 
+            style={[styles.logoContainer, compact && styles.logoContainerCompact]} 
+            onPress={navigateToHome}
+            activeOpacity={0.7}
+          >
             <View style={styles.logoShadow}>
-              <MaterialCommunityIcons name="toy-brick" size={45} color="#FFFFFF" />
+              <MaterialCommunityIcons 
+                name="toy-brick" 
+                size={compact ? 36 : 45} 
+                color="#FFFFFF" 
+              />
             </View>
-          </View>
-          <Text style={styles.sectionText}>{section}</Text>
+          </TouchableOpacity>
+          <Text style={[styles.sectionText, compact && styles.sectionTextCompact]}>
+            {section}
+          </Text>
         </View>
         <View style={styles.rightSection}>
-          <TouchableOpacity 
-            style={styles.legoButton}
-            onPress={() => alert('Profile feature coming soon')}
-          >
-            <MaterialCommunityIcons name="account" size={22} color="#FFFFFF" />
-            <View style={styles.buttonStud} />
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.legoButton, { backgroundColor: '#FFC500' }]}
-            onPress={() => alert('Notifications feature coming soon')}
-          >
-            <MaterialCommunityIcons 
-              name="bell" 
-              size={22} 
-              color="#FFFFFF" 
-            />
-            <View style={styles.buttonStud} />
-          </TouchableOpacity>
+          {/* In compact mode, only show cart and profile buttons */}
+          {!compact ? (
+            <>
+              <TouchableOpacity 
+                style={styles.legoButton}
+                onPress={() => alert('Profile feature coming soon')}
+              >
+                <MaterialCommunityIcons name="account" size={22} color="#FFFFFF" />
+                <View style={styles.buttonStud} />
+              </TouchableOpacity>
+              <TouchableOpacity 
+                style={[styles.legoButton, { backgroundColor: '#FFC500' }]}
+                onPress={() => alert('Notifications feature coming soon')}
+              >
+                <MaterialCommunityIcons name="bell" size={22} color="#FFFFFF" />
+                <View style={styles.buttonStud} />
+              </TouchableOpacity>
+            </>
+          ) : null}
           <TouchableOpacity 
             style={[styles.legoButton, { backgroundColor: '#4CAF50' }]}
-            onPress={() => alert('Cart feature coming soon')}
+            onPress={() => router.push('/Cart')}
           >
             <MaterialCommunityIcons 
               name="cart" 
@@ -141,6 +156,9 @@ const styles = StyleSheet.create({
     shadowOpacity: 0.3,
     shadowRadius: 3,
   },
+  safeAreaCompact: {
+    paddingTop: Platform.OS === 'android' ? 25 : 0,
+  },
   topStudsRow: {
     flexDirection: 'row',
     justifyContent: 'space-between',
@@ -175,6 +193,9 @@ const styles = StyleSheet.create({
     paddingHorizontal: 16,
     paddingVertical: 12,
   },
+  containerCompact: {
+    paddingVertical: 6,
+  },
   leftSection: {
     flex: 1,
     flexDirection: 'row',
@@ -184,6 +205,9 @@ const styles = StyleSheet.create({
     marginRight: 12,
     justifyContent: 'center',
     alignItems: 'center',
+  },
+  logoContainerCompact: {
+    marginRight: 8,
   },
   rightSection: {
     flexDirection: 'row',
@@ -211,6 +235,9 @@ const styles = StyleSheet.create({
       default: 'System'
     }),
     textTransform: 'uppercase',
+  },
+  sectionTextCompact: {
+    fontSize: 16,
   },
   legoButton: {
     padding: 8,

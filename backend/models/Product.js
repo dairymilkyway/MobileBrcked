@@ -11,6 +11,12 @@ const ProductSchema = new mongoose.Schema({
     required: true,
     min: 0
   },
+  stock: {
+    type: Number,
+    required: true,
+    default: 0,
+    min: 0
+  },
   description: {
     type: String,
     required: true
@@ -20,10 +26,10 @@ const ProductSchema = new mongoose.Schema({
     required: true,
     enum: ['Minifigure', 'Set', 'Piece']
   },
-  image: {
-    type: String,
+  imageURL: {
+    type: [String],
     required: true,
-    default: 'https://via.placeholder.com/300'
+    default: ['https://via.placeholder.com/300']
   },
   pieces: {
     type: Number,

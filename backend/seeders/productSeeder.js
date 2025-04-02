@@ -1,84 +1,212 @@
 const mongoose = require('mongoose');
 const Product = require('../models/Product');
 
-// Sample product data
+// Sample product data with prices in Philippine Pesos (₱)
 const products = [
   // Minifigures
   {
     name: 'Batman Minifigure',
-    price: 9.99,
+    price: 499.99, // Price in PHP Pesos
     description: 'Classic Batman minifigure with cape and utility belt',
     category: 'Minifigure',
-    image: 'https://m.media-amazon.com/images/I/71jX7YPPWVL._AC_UF1000,1000_QL80_.jpg',
-    pieces: 1
+    imageURL: [
+      'https://placehold.co/400x400/DA291C/FFD700/png',
+      'https://placehold.co/400x400/FFD700/DA291C/png'
+    ],
+    pieces: 1,
+    stock: 25
   },
   {
     name: 'Astronaut Minifigure',
-    price: 7.99,
+    price: 399.99, // Price in PHP Pesos
     description: 'Space explorer minifigure with oxygen tank and helmet',
     category: 'Minifigure',
-    image: 'https://cdn.rebrickable.com/media/thumbs/parts/elements/4547957.jpg/250x250p.jpg',
-    pieces: 1
+    imageURL: [
+      'https://placehold.co/400x400/DA291C/FFD700/png',
+      'https://placehold.co/400x400/FFD700/DA291C/png',
+      'https://placehold.co/400x400/DA291C/FFD700/png'
+    ],
+    pieces: 1,
+    stock: 15
   },
   {
     name: 'Pirate Captain Minifigure',
-    price: 8.99,
+    price: 449.99, // Price in PHP Pesos
     description: 'Pirate captain with eye patch, hat and sword accessories',
     category: 'Minifigure',
-    image: 'https://m.media-amazon.com/images/I/61m38acMLvL._AC_UF1000,1000_QL80_.jpg',
-    pieces: 1
+    imageURL: [
+      'https://placehold.co/400x400/DA291C/FFD700/png',
+      'https://placehold.co/400x400/FFD700/DA291C/png',
+      'https://placehold.co/400x400/DA291C/FFD700/png'
+    ],
+    pieces: 1,
+    stock: 10
   },
   
   // Sets
   {
     name: 'City Police Station',
-    price: 89.99,
+    price: 4499.99, // Price in PHP Pesos
     description: 'Complete police station with jail cells, 5 minifigures and vehicles',
     category: 'Set',
-    image: 'https://www.lego.com/cdn/cs/set/assets/bltf829afe15b940424/60246.jpg',
-    pieces: 743
+    imageURL: [
+      'https://placehold.co/400x400/DA291C/FFD700/png',
+      'https://placehold.co/400x400/FFD700/DA291C/png',
+      'https://placehold.co/400x400/DA291C/FFD700/png'
+    ],
+    pieces: 743,
+    stock: 8
   },
   {
     name: 'Spaceship Explorer',
-    price: 129.99,
+    price: 6499.99, // Price in PHP Pesos
     description: 'Intergalactic spaceship with opening cockpit and retractable landing gear',
     category: 'Set',
-    image: 'https://www.lego.com/cdn/cs/set/assets/blt5a0f73a09a9e484c/10497.png',
-    pieces: 1254
+    imageURL: [
+      'https://placehold.co/400x400/DA291C/FFD700/png',
+      'https://placehold.co/400x400/FFD700/DA291C/png',
+      'https://placehold.co/400x400/DA291C/FFD700/png'
+    ],
+    pieces: 1254,
+    stock: 5
   },
   {
     name: 'Medieval Castle',
-    price: 149.99,
+    price: 7499.99, // Price in PHP Pesos
     description: 'Detailed castle with drawbridge, towers, and knights minifigures',
     category: 'Set',
-    image: 'https://www.lego.com/cdn/cs/set/assets/blt20eb5ddb08279a27/10305.png',
-    pieces: 4514
+    imageURL: [
+      'https://placehold.co/400x400/DA291C/FFD700/png',
+      'https://placehold.co/400x400/FFD700/DA291C/png',
+      'https://placehold.co/400x400/DA291C/FFD700/png'
+    ],
+    pieces: 4514,
+    stock: 3
   },
   
   // Pieces
   {
     name: '2x4 Blue Brick',
-    price: 0.99,
+    price: 49.99, // Price in PHP Pesos
     description: 'Standard 2x4 blue building brick',
     category: 'Piece',
-    image: 'https://m.media-amazon.com/images/I/51TxJMZ2s-L._AC_.jpg',
-    pieces: 1
+    imageURL: [
+      'https://placehold.co/400x400/DA291C/FFD700/png',
+      'https://placehold.co/400x400/FFD700/DA291C/png',
+      'https://placehold.co/400x400/DA291C/FFD700/png'
+    ],
+    pieces: 1,
+    stock: 250
   },
   {
     name: 'Transparent Round 1x1',
-    price: 0.59,
+    price: 29.99, // Price in PHP Pesos
     description: 'Small transparent round piece, perfect for lights or decorations',
     category: 'Piece',
-    image: 'https://www.bricklink.com/PL/3005.jpg',
-    pieces: 1
+    imageURL: [
+      'https://placehold.co/400x400/DA291C/FFD700/png',
+      'https://placehold.co/400x400/FFD700/DA291C/png',
+      'https://placehold.co/400x400/DA291C/FFD700/png'
+    ],
+    pieces: 1,
+    stock: 300
   },
   {
     name: 'Curved Red Slope 2x2',
-    price: 0.79,
+    price: 39.99, // Price in PHP Pesos
     description: 'Curved red roof piece for architectural designs',
     category: 'Piece',
-    image: 'https://www.bricklink.com/PL/3063.jpg',
-    pieces: 1
+    imageURL: [
+      'https://placehold.co/400x400/DA291C/FFD700/png',
+      'https://placehold.co/400x400/FFD700/DA291C/png',
+      'https://placehold.co/400x400/DA291C/FFD700/png'
+    ],
+    pieces: 1,
+    stock: 180
+  },
+  
+  // Additional Products
+  // More Minifigures
+  {
+    name: 'Wizard Minifigure',
+    price: 599.99, // Price in PHP Pesos
+    description: 'Magical wizard with staff, hat and spellbook',
+    category: 'Minifigure',
+    imageURL: [
+      'https://placehold.co/400x400/DA291C/FFD700/png',
+      'https://placehold.co/400x400/FFD700/DA291C/png',
+      'https://placehold.co/400x400/DA291C/FFD700/png'
+    ],
+    pieces: 1,
+    stock: 12
+  },
+  {
+    name: 'Robot Minifigure',
+    price: 424.99, // Price in PHP Pesos
+    description: 'Futuristic robot with articulated limbs and light-up eyes',
+    category: 'Minifigure',
+    imageURL: [
+      'https://placehold.co/400x400/DA291C/FFD700/png',
+      'https://placehold.co/400x400/FFD700/DA291C/png',
+      'https://placehold.co/400x400/DA291C/FFD700/png'
+    ],
+    pieces: 1,
+    stock: 20
+  },
+  
+  // More Sets
+  {
+    name: 'Treehouse Retreat',
+    price: 9999.99, // Price in PHP Pesos
+    description: 'Detailed treehouse with three cabins, working elevator and botanical elements',
+    category: 'Set',
+    imageURL: [
+      'https://placehold.co/400x400/DA291C/FFD700/png',
+      'https://placehold.co/400x400/FFD700/DA291C/png',
+      'https://placehold.co/400x400/DA291C/FFD700/png'
+    ],
+    pieces: 3036,
+    stock: 4
+  },
+  {
+    name: 'Vintage Car',
+    price: 3999.99, // Price in PHP Pesos
+    description: 'Classic vintage car model with opening doors, trunk and detailed engine',
+    category: 'Set',
+    imageURL: [
+      'https://placehold.co/400x400/DA291C/FFD700/png',
+      'https://placehold.co/400x400/FFD700/DA291C/png',
+      'https://placehold.co/400x400/DA291C/FFD700/png'
+    ],
+    pieces: 1471,
+    stock: 9
+  },
+  
+  // More Pieces
+  {
+    name: 'Green Base Plate 32x32',
+    price: 399.99, // Price in PHP Pesos
+    description: 'Large green base plate, perfect for landscapes and gardens',
+    category: 'Piece',
+    imageURL: [
+      'https://placehold.co/400x400/DA291C/FFD700/png',
+      'https://placehold.co/400x400/FFD700/DA291C/png',
+      'https://placehold.co/400x400/DA291C/FFD700/png'
+    ],
+    pieces: 1,
+    stock: 40
+  },
+  {
+    name: 'Door Frame with Door',
+    price: 124.99, // Price in PHP Pesos
+    description: 'Complete door assembly with frame, perfect for buildings',
+    category: 'Piece',
+    imageURL: [
+      'https://placehold.co/400x400/DA291C/FFD700/png',
+      'https://placehold.co/400x400/FFD700/DA291C/png',
+      'https://placehold.co/400x400/DA291C/FFD700/png'
+    ],es: 2,
+    stock: 75
   }
 ];
 
