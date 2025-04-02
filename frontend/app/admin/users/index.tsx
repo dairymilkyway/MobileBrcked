@@ -1,57 +1,149 @@
-import React from 'react';
-import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, StatusBar } from 'react-native';
+import React, { useEffect, useState } from 'react';
+import { View, Text, StyleSheet, FlatList, TouchableOpacity, SafeAreaView, StatusBar, Alert, ActivityIndicator } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { router } from 'expo-router';
+import axios from 'axios';
+import { API_BASE_URL } from '../../../env';
 
 // Define interface for user data
 interface User {
-  id: number;
-  name: string;
+  _id: string;
+  username: string;
   email: string;
   role: string;
-  lastActive: string;
-  orders: number;
 }
 
-// Mock data
-const userData: User[] = [
-  { id: 1, name: 'John Builder', email: 'john@example.com', role: 'Administrator', lastActive: '2 hours ago', orders: 24 },
-  { id: 2, name: 'Emma Bricks', email: 'emma@example.com', role: 'Moderator', lastActive: '1 day ago', orders: 12 },
-  { id: 3, name: 'Mike Blocks', email: 'mike@example.com', role: 'Content Creator', lastActive: '5 mins ago', orders: 8 },
-  { id: 4, name: 'Sarah Plates', email: 'sarah@example.com', role: 'Inventory Manager', lastActive: '3 hours ago', orders: 16 },
-  { id: 5, name: 'David Lego', email: 'david@example.com', role: 'Customer', lastActive: '1 hour ago', orders: 9 },
-  { id: 6, name: 'Jessica Brick', email: 'jessica@example.com', role: 'Customer', lastActive: '2 days ago', orders: 7 },
-  { id: 7, name: 'Robert Piece', email: 'robert@example.com', role: 'Customer', lastActive: '4 hours ago', orders: 15 },
-  { id: 8, name: 'Michelle Set', email: 'michelle@example.com', role: 'Customer', lastActive: '12 hours ago', orders: 4 },
-];
-
 const UsersScreen = () => {
+  const [users, setUsers] = useState<User[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+
+  // Fetch users from API
+  const fetchUsers = async () => {
+    try {
+      setLoading(true);
+      setError(null);
+
+      // Get token from AsyncStorage
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        router.replace('/Login');
+        return;
+      }
+
+      // Fetch users from API
+      const response = await axios.get(`${API_BASE_URL}/users`, {
+        headers: {
+          Authorization: `Bearer ${token}`
+        }
+      });
+
+      setUsers(response.data);
+    } catch (err: any) {
+      console.error('Error fetching users:', err);
+      if (err.response?.status === 403) {
+        Alert.alert('Access Denied', 'You do not have permission to view this page');
+        router.back();
+      } else {
+        setError('Failed to load users. Please try again.');
+      }
+    } finally {
+      setLoading(false);
+    }
+  };
+
+  useEffect(() => {
+    fetchUsers();
+  }, []);
+
+  // Delete user handler
+  const handleDeleteUser = async (userId: string) => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) return;
+
+      // Confirm delete
+      Alert.alert(
+        'Delete User',
+        'Are you sure you want to delete this user?',
+        [
+          { text: 'Cancel', style: 'cancel' },
+          { 
+            text: 'Delete', 
+            style: 'destructive', 
+            onPress: async () => {
+              try {
+                await axios.delete(`${API_BASE_URL}/users/${userId}`, {
+                  headers: {
+                    Authorization: `Bearer ${token}`
+                  }
+                });
+                
+                // Refresh user list
+                fetchUsers();
+                Alert.alert('Success', 'User deleted successfully');
+              } catch (error) {
+                console.error('Error deleting user:', error);
+                Alert.alert('Error', 'Failed to delete user');
+              }
+            } 
+          }
+        ]
+      );
+    } catch (err) {
+      console.error('Error deleting user:', err);
+      Alert.alert('Error', 'Failed to delete user');
+    }
+  };
+
   const renderUserItem = ({ item }: { item: User }) => (
     <TouchableOpacity style={styles.userCard}>
       <View style={styles.userInfoContainer}>
         <View style={styles.userAvatarContainer}>
-          <Text style={styles.userAvatar}>{item.name.charAt(0)}</Text>
+          <Text style={styles.userAvatar}>{item.username.charAt(0)}</Text>
         </View>
         <View style={styles.userDetails}>
-          <Text style={styles.userName}>{item.name}</Text>
+          <Text style={styles.userName}>{item.username}</Text>
           <Text style={styles.userEmail}>{item.email}</Text>
           <Text style={styles.userRole}>{item.role}</Text>
         </View>
       </View>
       <View style={styles.userStatsContainer}>
-        <View style={styles.userStatItem}>
-          <Ionicons name="time-outline" size={16} color="#666" />
-          <Text style={styles.userStatText}>{item.lastActive}</Text>
-        </View>
-        <View style={styles.userStatItem}>
-          <Ionicons name="cart-outline" size={16} color="#666" />
-          <Text style={styles.userStatText}>{item.orders} Orders</Text>
-        </View>
-        <TouchableOpacity style={styles.actionButton}>
+        <TouchableOpacity 
+          style={[styles.actionButton, { backgroundColor: '#4a7dff' }]}
+          onPress={() => router.push({
+            pathname: '/admin/users/edit/[id]' as any,
+            params: { id: item._id }
+          })}
+        >
           <Ionicons name="create-outline" size={18} color="#fff" />
+        </TouchableOpacity>
+        <TouchableOpacity 
+          style={[styles.actionButton, { backgroundColor: '#c41818' }]}
+          onPress={() => handleDeleteUser(item._id)}
+        >
+          <Ionicons name="trash-outline" size={18} color="#fff" />
         </TouchableOpacity>
       </View>
     </TouchableOpacity>
   );
+
+  // Handle add new user
+  const handleAddUser = () => {
+    router.push('/admin/users/add' as any);
+  };
+
+  if (loading) {
+    return (
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color="#c41818" />
+          <Text style={styles.loadingText}>Loading users...</Text>
+        </View>
+      </SafeAreaView>
+    );
+  }
 
   return (
     <SafeAreaView style={styles.safeArea}>
@@ -59,30 +151,33 @@ const UsersScreen = () => {
       <View style={styles.container}>
         <View style={styles.header}>
           <Text style={styles.title}>Users Management</Text>
-          <TouchableOpacity style={styles.addButton}>
+          <TouchableOpacity style={styles.addButton} onPress={handleAddUser}>
             <Ionicons name="add" size={24} color="#fff" />
             <Text style={styles.addButtonText}>Add User</Text>
           </TouchableOpacity>
         </View>
         
-        <View style={styles.filterContainer}>
-          <TouchableOpacity style={styles.filterButton}>
-            <Ionicons name="filter-outline" size={16} color="#333" />
-            <Text style={styles.filterButtonText}>Filter</Text>
-          </TouchableOpacity>
-          <TouchableOpacity style={styles.filterButton}>
-            <Ionicons name="search-outline" size={16} color="#333" />
-            <Text style={styles.filterButtonText}>Search</Text>
-          </TouchableOpacity>
-        </View>
-
-        <FlatList
-          data={userData}
-          renderItem={renderUserItem}
-          keyExtractor={(item) => item.id.toString()}
-          contentContainerStyle={styles.listContainer}
-          showsVerticalScrollIndicator={false}
-        />
+        {error ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity style={styles.retryButton} onPress={fetchUsers}>
+              <Text style={styles.retryButtonText}>Retry</Text>
+            </TouchableOpacity>
+          </View>
+        ) : users.length === 0 ? (
+          <View style={styles.emptyContainer}>
+            <Ionicons name="people-outline" size={64} color="#ccc" />
+            <Text style={styles.emptyText}>No users found</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={users}
+            renderItem={renderUserItem}
+            keyExtractor={(item) => item._id}
+            contentContainerStyle={styles.listContainer}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
       </View>
     </SafeAreaView>
   );
@@ -122,24 +217,47 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     marginLeft: 8,
   },
-  filterContainer: {
-    flexDirection: 'row',
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loadingText: {
+    marginTop: 12,
+    fontSize: 16,
+    color: '#666',
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#c41818',
+    textAlign: 'center',
     marginBottom: 16,
   },
-  filterButton: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    backgroundColor: '#fff',
-    paddingHorizontal: 12,
-    paddingVertical: 8,
-    borderRadius: 6,
-    marginRight: 10,
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+  retryButton: {
+    backgroundColor: '#c41818',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
   },
-  filterButtonText: {
-    marginLeft: 6,
-    color: '#333',
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
+  },
+  emptyContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  emptyText: {
+    fontSize: 18,
+    color: '#999',
+    marginTop: 12,
   },
   listContainer: {
     paddingBottom: 20,
@@ -198,24 +316,14 @@ const styles = StyleSheet.create({
   },
   userStatsContainer: {
     flexDirection: 'row',
-    justifyContent: 'space-between',
+    justifyContent: 'flex-end',
     alignItems: 'center',
     borderTopWidth: 1,
     borderTopColor: '#f0f0f0',
     paddingTop: 12,
-  },
-  userStatItem: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    marginRight: 16,
-  },
-  userStatText: {
-    marginLeft: 4,
-    fontSize: 14,
-    color: '#666',
+    gap: 10,
   },
   actionButton: {
-    backgroundColor: '#c41818',
     width: 36,
     height: 36,
     borderRadius: 18,

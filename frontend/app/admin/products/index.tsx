@@ -15,42 +15,39 @@ import {
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import { getProducts, deleteProduct } from '../../../utils/api';
+import { deleteProduct } from '../../../utils/api';
 import { Product } from '../../../types/product';
 import AuthCheck from '../../../components/AuthCheck';
+import { useAppDispatch, useAppSelector } from '../../../redux/hooks';
+import { fetchProducts, removeProduct, setCurrentPage, ProductsState } from '../../../redux/slices/productSlice';
+import { RootState } from '../../../redux/store';
 
 const { width } = Dimensions.get('window');
 
 const ProductsAdminScreen = () => {
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
+  const dispatch = useAppDispatch();
+  const { items: products, loading, error, totalPages, currentPage } = useAppSelector((state: RootState) => state.products as ProductsState);
   const [refreshing, setRefreshing] = useState(false);
-  const [currentPage, setCurrentPage] = useState(1);
-  const [totalPages, setTotalPages] = useState(1);
   const [selectedProduct, setSelectedProduct] = useState<Product | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const router = useRouter();
 
-  const fetchProducts = async (page = 1) => {
+  const fetchProductsData = async (page = 1) => {
     try {
-      setLoading(true);
-      const result = await getProducts(page, 10);
-      setProducts(result.data);
-      setTotalPages(result.totalPages);
-      setCurrentPage(page);
+      setRefreshing(true);
+      await dispatch(fetchProducts({ page, limit: 10 })).unwrap();
     } catch (error) {
       console.error('Error fetching products:', error);
       Alert.alert('Error', 'Failed to load products');
     } finally {
-      setLoading(false);
       setRefreshing(false);
     }
   };
 
   const handleRefresh = () => {
     setRefreshing(true);
-    fetchProducts(1);
+    fetchProductsData(1);
   };
 
   const handleDeleteProduct = async (id: string, name: string) => {
@@ -64,16 +61,11 @@ const ProductsAdminScreen = () => {
           style: 'destructive',
           onPress: async () => {
             try {
-              setLoading(true);
-              await deleteProduct(id);
-              // After deleting, refresh the list
-              fetchProducts(currentPage);
+              await dispatch(removeProduct(id)).unwrap();
               Alert.alert('Success', `Product "${name}" deleted successfully`);
             } catch (error) {
               console.error('Error deleting product:', error);
               Alert.alert('Error', 'Failed to delete product');
-            } finally {
-              setLoading(false);
             }
           },
         },
@@ -101,9 +93,32 @@ const ProductsAdminScreen = () => {
     }
   };
 
+  const handlePageChange = (page: number) => {
+    dispatch(setCurrentPage(page));
+    fetchProductsData(page);
+  };
+
   useEffect(() => {
-    fetchProducts();
+    fetchProductsData();
   }, []);
+
+  // Show error message if there was an error
+  if (error) {
+    return (
+      <View style={styles.container}>
+        <AuthCheck requiredRole="admin" />
+        <View style={styles.errorContainer}>
+          <Text style={styles.errorText}>Error: {error}</Text>
+          <TouchableOpacity 
+            style={styles.retryButton} 
+            onPress={() => fetchProductsData(currentPage)}
+          >
+            <Text style={styles.retryButtonText}>Retry</Text>
+          </TouchableOpacity>
+        </View>
+      </View>
+    );
+  }
 
   const renderProductItem = ({ item }: { item: Product }) => {
     const imageUri = item.imageURL && item.imageURL.length > 0 
@@ -314,7 +329,7 @@ const ProductsAdminScreen = () => {
             <View style={styles.pagination}>
               <TouchableOpacity 
                 style={[styles.pageButton, currentPage === 1 && styles.disabledButton]}
-                onPress={() => currentPage > 1 && fetchProducts(currentPage - 1)}
+                onPress={() => currentPage > 1 && handlePageChange(currentPage - 1)}
                 disabled={currentPage === 1}
               >
                 <Ionicons name="chevron-back" size={20} color={currentPage === 1 ? '#ccc' : '#333'} />
@@ -324,7 +339,7 @@ const ProductsAdminScreen = () => {
               </Text>
               <TouchableOpacity 
                 style={[styles.pageButton, currentPage === totalPages && styles.disabledButton]}
-                onPress={() => currentPage < totalPages && fetchProducts(currentPage + 1)}
+                onPress={() => currentPage < totalPages && handlePageChange(currentPage + 1)}
                 disabled={currentPage === totalPages}
               >
                 <Ionicons name="chevron-forward" size={20} color={currentPage === totalPages ? '#ccc' : '#333'} />
@@ -633,6 +648,26 @@ const styles = StyleSheet.create({
     padding: 15,
     borderRadius: 8,
     marginTop: 8,
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+  },
+  errorText: {
+    fontSize: 18,
+    color: '#e74c3c',
+    marginBottom: 16,
+  },
+  retryButton: {
+    backgroundColor: '#3498db',
+    padding: 12,
+    borderRadius: 8,
+  },
+  retryButtonText: {
+    color: '#fff',
+    fontWeight: 'bold',
   },
 });
 

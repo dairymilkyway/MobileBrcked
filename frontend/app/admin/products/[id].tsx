@@ -16,10 +16,13 @@ import { useRouter, useLocalSearchParams } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { Dropdown } from 'react-native-element-dropdown';
-import { getProductById, updateProduct, deleteProduct } from '../../../utils/api';
+import { deleteProduct } from '../../../utils/api';
 import { API_BASE_URL } from '../../../env';
 import { Product, ProductFormData } from '../../../types/product';
 import AuthCheck from '../../../components/AuthCheck';
+import { useAppDispatch, useAppSelector } from '../../../redux/hooks';
+import { fetchProductById, editProduct, removeProduct, clearSelectedProduct, ProductsState } from '../../../redux/slices/productSlice';
+import { RootState } from '../../../redux/store';
 
 // Category data for dropdown
 const categoryData = [
@@ -31,11 +34,12 @@ const categoryData = [
 const EditProductScreen = () => {
   const router = useRouter();
   const { id } = useLocalSearchParams<{ id: string }>();
-  const [loading, setLoading] = useState(true);
+  const dispatch = useAppDispatch();
+  const { selectedProduct, loading } = useAppSelector((state: RootState) => state.products as ProductsState);
+  const [product, setProduct] = useState<Product | null>(null);
   const [saving, setSaving] = useState(false);
   const [deleting, setDeleting] = useState(false);
   const [isFocus, setIsFocus] = useState(false);
-  const [product, setProduct] = useState<Product | null>(null);
   const [formData, setFormData] = useState<ProductFormData>({
     name: '',
     price: '',
@@ -49,35 +53,33 @@ const EditProductScreen = () => {
 
   useEffect(() => {
     if (id) {
-      fetchProduct(id);
+      dispatch(fetchProductById(id));
     }
-  }, [id]);
+    
+    // Clear selected product when component unmounts
+    return () => {
+      dispatch(clearSelectedProduct());
+    };
+  }, [id, dispatch]);
 
-  const fetchProduct = async (productId: string) => {
-    try {
-      setLoading(true);
-      const productData = await getProductById(productId);
-      setProduct(productData);
+  useEffect(() => {
+    if (selectedProduct) {
+      // Set local product state from Redux state
+      setProduct(selectedProduct);
       
-      // Initialize form data
+      // Initialize form data when product data is loaded
       setFormData({
-        name: productData.name,
-        price: productData.price.toString(),
-        stock: productData.stock.toString(),
-        description: productData.description,
-        category: productData.category,
-        pieces: productData.pieces.toString(),
+        name: selectedProduct.name,
+        price: selectedProduct.price.toString(),
+        stock: selectedProduct.stock.toString(),
+        description: selectedProduct.description,
+        category: selectedProduct.category,
+        pieces: selectedProduct.pieces.toString(),
         images: [],
         removeImages: false,
       });
-    } catch (error) {
-      console.error('Error fetching product:', error);
-      Alert.alert('Error', 'Failed to load product details');
-      router.back();
-    } finally {
-      setLoading(false);
     }
-  };
+  }, [selectedProduct]);
 
   const handleInputChange = (field: keyof ProductFormData, value: string) => {
     setFormData({ ...formData, [field]: value });
@@ -165,13 +167,16 @@ const EditProductScreen = () => {
     // Create a new array of images without this specific image
     const updatedImageUrls = [...product.imageURL].filter((_, idx) => idx !== index);
     
-    // Create a copy of the product with updated imageURL
+    // Create a copy of the product with updated imageURL for local state rendering
     const updatedProduct = {
       ...product,
       imageURL: updatedImageUrls
     };
     
     // Update the local product state 
+    // Don't dispatch fetchProductById as it reloads the product from server
+    
+    // Instead of reloading the whole product, just update our local state
     setProduct(updatedProduct);
     
     // Update formData to include the updated existing images
@@ -244,27 +249,13 @@ const EditProductScreen = () => {
     
     try {
       setSaving(true);
-      
-      // If we have explicitly modified the existing images (by removing one)
-      if (formData.existingImages) {
-        // We already have the existingImages in formData, so we can just update
-        await updateProduct(id, formData);
-      } 
-      // If the user has chosen to remove all existing images
-      else if (formData.removeImages) {
-        await updateProduct(id, formData);
-      } 
-      // Normal update without image changes
-      else {
-        await updateProduct(id, formData);
-      }
-      
+      await dispatch(editProduct({ id, productData: formData })).unwrap();
       Alert.alert('Success', 'Product updated successfully', [
-        { text: 'OK', onPress: () => router.back() }
+        { text: 'OK', onPress: () => router.push('/admin/products') }
       ]);
     } catch (error) {
       console.error('Error updating product:', error);
-      Alert.alert('Error', 'Failed to update product');
+      Alert.alert('Error', typeof error === 'string' ? error : 'Failed to update product');
     } finally {
       setSaving(false);
     }
@@ -284,13 +275,13 @@ const EditProductScreen = () => {
             
             try {
               setDeleting(true);
-              await deleteProduct(id);
+              await dispatch(removeProduct(id)).unwrap();
               Alert.alert('Success', 'Product deleted successfully', [
-                { text: 'OK', onPress: () => router.back() }
+                { text: 'OK', onPress: () => router.push('/admin/products') }
               ]);
             } catch (error) {
               console.error('Error deleting product:', error);
-              Alert.alert('Error', 'Failed to delete product');
+              Alert.alert('Error', typeof error === 'string' ? error : 'Failed to delete product');
               setDeleting(false);
             }
           },
@@ -428,7 +419,7 @@ const EditProductScreen = () => {
                   </View>
                   
                   <ScrollView horizontal style={styles.imagesScroll}>
-                    {product.imageURL.map((imageUrl, index) => (
+                    {product.imageURL.map((imageUrl: string, index: number) => (
                       <View key={index} style={styles.imageContainer}>
                         <Image 
                           source={{ 

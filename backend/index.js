@@ -15,6 +15,7 @@ const path = require('path');
 const User = require('./models/User');
 // Import the product routes
 const productRoutes = require('./apis/ProductAPI');
+const userRoutes = require('./apis/UserAPI');
 const authenticateToken = require('./middleware/auth'); // ✅ Import auth middleware
 
 const app = express();
@@ -68,6 +69,9 @@ app.post('/api/login', async (req, res) => {
 
 // Use product routes
 app.use('/api/products', productRoutes);
+
+// Use user routes
+app.use('/api/users', userRoutes);
 
 // ✅ Protected route example
 app.get('/api/profile', authenticateToken, async (req, res) => {
