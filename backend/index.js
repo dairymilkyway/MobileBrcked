@@ -3,6 +3,7 @@ const mongoose = require('mongoose');
 const dotenv = require('dotenv');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
+const path = require('path');
 const User = require('./models/User');
 // Import the product routes
 const productRoutes = require('./apis/ProductAPI');
@@ -21,6 +22,9 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Serve static files from the uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ✅ MongoDB Connection
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
@@ -48,16 +52,13 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // ✅ Generate JWT token
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    // ✅ Generate JWT token with 24 hour expiration
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '24h' });
     res.json({ token, role: user.role });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
-// Use product routes
-app.use('/api/products', productRoutes);
 
 // Use product routes
 app.use('/api/products', productRoutes);

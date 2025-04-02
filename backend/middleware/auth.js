@@ -4,11 +4,14 @@ const jwt = require('jsonwebtoken');
 // ✅ Middleware to verify JWT Token
 const authenticateToken = (req, res, next) => {
   // Get token from header
-  const token = req.headers['authorization'];
+  const authHeader = req.headers['authorization'];
 
-  if (!token) {
+  if (!authHeader) {
     return res.status(401).json({ error: 'Access denied. No token provided.' });
   }
+
+  // Extract the token from the Authorization header (remove 'Bearer ' prefix)
+  const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
 
   try {
     // Verify token

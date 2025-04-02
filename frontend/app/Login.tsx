@@ -32,15 +32,24 @@ export default function LoginScreen() {
   useEffect(() => {
     // ✅ Check if user is already logged in
     const checkLoginStatus = async () => {
-      const token = await AsyncStorage.getItem('userToken');
-      const role = await AsyncStorage.getItem('userRole');
+      try {
+        const token = await AsyncStorage.getItem('userToken');
+        const role = await AsyncStorage.getItem('userRole');
 
-      if (token) {
-        if (role === 'admin') {
-          router.replace('/admin/dashboard');
-        } else {
-          router.replace('/user/home');
+        console.log('Login check - Token:', token ? 'exists' : 'missing');
+        console.log('Login check - Role:', role);
+
+        if (token) {
+          if (role === 'admin') {
+            console.log('Redirecting to admin dashboard');
+            router.replace('/admin/dashboard');
+          } else {
+            console.log('Redirecting to user home');
+            router.replace('/user/home');
+          }
         }
+      } catch (error) {
+        console.error('Error checking login status:', error);
       }
     };
 
@@ -91,6 +100,13 @@ export default function LoginScreen() {
       }),
     ]).start(async () => {
       try {
+        // Validate input
+        if (!email.trim() || !password.trim()) {
+          Alert.alert('Error', 'Please enter email and password');
+          return;
+        }
+
+        console.log('Attempting login with:', email);
         const response = await fetch(`${API_BASE_URL}/login`, {
           method: 'POST',
           headers: { 'Content-Type': 'application/json' },
@@ -98,22 +114,43 @@ export default function LoginScreen() {
         });
 
         const data = await response.json();
-        if (response.ok) {
-          // ✅ Save token and role to AsyncStorage
+        console.log('Login response status:', response.status);
+        console.log('Login response role:', data.role);
+        
+        if (response.ok && data.token) {
+          // Ensure we save the token in BOTH places to maintain consistency
+          console.log('Saving token to AsyncStorage, token length:', data.token.length);
+          
+          // Save token and user data
+          await AsyncStorage.setItem('token', data.token);
           await AsyncStorage.setItem('userToken', data.token);
           await AsyncStorage.setItem('userRole', data.role);
+          
+          // Additional user data if available
+          if (data.userId) await AsyncStorage.setItem('userId', data.userId);
+          if (data.name) await AsyncStorage.setItem('userName', data.name);
+          
+          // Verify token was saved
+          const savedToken = await AsyncStorage.getItem('token');
+          console.log('Verified saved token length:', savedToken ? savedToken.length : 0);
 
           Alert.alert('Success', 'Logged in successfully');
+          
           if (data.role === 'admin') {
-            router.push('/admin/admindashboard');
+            console.log('Admin login successful, redirecting to admin dashboard');
+            router.push('/admin/dashboard');
           } else {
+            console.log('User login successful, redirecting to user home');
             router.push('/user/home');
           }
         } else {
-          Alert.alert('Error', data.error);
+          const errorMsg = data.error || data.message || 'Invalid credentials';
+          console.error('Login failed:', errorMsg);
+          Alert.alert('Login Failed', errorMsg);
         }
       } catch (err) {
-        Alert.alert('Error', 'Something went wrong');
+        console.error('Login error:', err);
+        Alert.alert('Error', 'Something went wrong. Please try again.');
       }
     });
   };
