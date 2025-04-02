@@ -11,6 +11,7 @@ import {
   SafeAreaView
 } from 'react-native';
 import { BarChart, LineChart, PieChart } from 'react-native-chart-kit';
+import AuthCheck from '../../components/AuthCheck';
 
 // Get screen dimensions and set up responsive sizing
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -99,6 +100,8 @@ const AdminDashboard = () => {
 
   return (
     <SafeAreaView style={styles.safeArea}>
+      <AuthCheck requiredRole="admin" />
+      
       <StatusBar barStyle="light-content" backgroundColor="#c41818" />
       <View style={styles.container}>
         {/* Main Content */}

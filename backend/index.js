@@ -1,14 +1,21 @@
+// Load environment variables right at the beginning to ensure they're available throughout the app
+require('dotenv').config();
+
+// Debug Cloudinary configuration 
+console.log('Cloudinary Config Check:');
+console.log('CLOUDINARY_CLOUD_NAME:', process.env.CLOUDINARY_CLOUD_NAME);
+console.log('CLOUDINARY_API_KEY exists:', !!process.env.CLOUDINARY_API_KEY);
+console.log('CLOUDINARY_API_SECRET exists:', !!process.env.CLOUDINARY_API_SECRET);
+
 const express = require('express');
 const mongoose = require('mongoose');
-const dotenv = require('dotenv');
 const cors = require('cors');
 const jwt = require('jsonwebtoken');
+const path = require('path');
 const User = require('./models/User');
 // Import the product routes
 const productRoutes = require('./apis/ProductAPI');
 const authenticateToken = require('./middleware/auth'); // ✅ Import auth middleware
-
-dotenv.config();
 
 const app = express();
 app.use(express.json());
@@ -21,6 +28,9 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Serve static files from the uploads directory
+app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // ✅ MongoDB Connection
 mongoose.connect(process.env.MONGO_URI, { useNewUrlParser: true, useUnifiedTopology: true })
@@ -48,16 +58,13 @@ app.post('/api/login', async (req, res) => {
       return res.status(401).json({ error: 'Invalid credentials' });
     }
 
-    // ✅ Generate JWT token
-    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '1h' });
+    // ✅ Generate JWT token with 24 hour expiration
+    const token = jwt.sign({ id: user._id, role: user.role }, process.env.JWT_SECRET, { expiresIn: '24h' });
     res.json({ token, role: user.role });
   } catch (err) {
     res.status(500).json({ error: err.message });
   }
 });
-
-// Use product routes
-app.use('/api/products', productRoutes);
 
 // Use product routes
 app.use('/api/products', productRoutes);
