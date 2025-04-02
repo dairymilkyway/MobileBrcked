@@ -16,9 +16,11 @@ import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { Dropdown } from 'react-native-element-dropdown';
-import { createProduct } from '../../../utils/api';
-import { ProductFormData } from '../../../types/product';
+import { ProductFormData, Product } from '../../../types/product';
 import AuthCheck from '../../../components/AuthCheck';
+import { useAppDispatch, useAppSelector } from '../../../redux/hooks';
+import { addProduct, ProductsState } from '../../../redux/slices/productSlice';
+import { RootState } from '../../../redux/store';
 
 // Category data for dropdown
 const categoryData = [
@@ -29,7 +31,8 @@ const categoryData = [
 
 const CreateProductScreen = () => {
   const router = useRouter();
-  const [loading, setLoading] = useState(false);
+  const dispatch = useAppDispatch();
+  const { loading } = useAppSelector((state: RootState) => state.products as ProductsState);
   const [isFocus, setIsFocus] = useState(false);
   const [formData, setFormData] = useState<ProductFormData>({
     name: '',
@@ -152,16 +155,13 @@ const CreateProductScreen = () => {
     if (!validateForm()) return;
     
     try {
-      setLoading(true);
-      await createProduct(formData);
+      await dispatch(addProduct(formData)).unwrap();
       Alert.alert('Success', 'Product created successfully', [
-        { text: 'OK', onPress: () => router.back() }
+        { text: 'OK', onPress: () => router.push('/admin/products') }
       ]);
     } catch (error) {
       console.error('Error creating product:', error);
-      Alert.alert('Error', 'Failed to create product');
-    } finally {
-      setLoading(false);
+      Alert.alert('Error', typeof error === 'string' ? error : 'Failed to create product');
     }
   };
 
