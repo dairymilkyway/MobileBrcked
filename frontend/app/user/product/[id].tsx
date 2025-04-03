@@ -45,6 +45,8 @@ export default function ProductDetail() {
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const carouselRef = useRef<FlatList>(null);
   const [ratings, setRatings] = useState<RatingData>({ averageRating: 0, totalReviews: 0 });
+  const [stockError, setStockError] = useState<string | null>(null);
+  const [isAddingToCart, setIsAddingToCart] = useState(false);
   
   // Sample images for demonstration - in real implementation, these would come from the product data
   const [productImages, setProductImages] = useState<string[]>([]);
@@ -159,8 +161,15 @@ export default function ProductDetail() {
   };
 
   const handleQuantityChange = (increment: boolean) => {
+    setStockError(null); // Clear any previous error messages
+    
     setQuantity(prev => {
       if (increment) {
+        // Check if increasing quantity would exceed available stock
+        if (product && prev + 1 > product.stock) {
+          setStockError(`Sorry, only ${product.stock} items available in stock.`);
+          return prev; // Don't increase quantity
+        }
         return prev + 1;
       } else {
         return prev > 1 ? prev - 1 : 1;
@@ -198,7 +207,7 @@ export default function ProductDetail() {
     setCurrentImageIndex(newIndex);
   };
 
-  const handleViewableItemsChanged = useRef(({ viewableItems }) => {
+  const handleViewableItemsChanged = useRef(({ viewableItems }: { viewableItems: any[] }) => {
     if (viewableItems.length > 0) {
       setCurrentImageIndex(viewableItems[0].index);
     }
@@ -209,7 +218,7 @@ export default function ProductDetail() {
   }).current;
 
   // Render star ratings
-  const renderStars = (rating) => {
+  const renderStars = (rating: number) => {
     const stars = [];
     const roundedRating = Math.round(rating * 2) / 2; // Round to nearest 0.5
     
@@ -230,6 +239,37 @@ export default function ProductDetail() {
     }
     
     return stars;
+  };
+
+  // Add to Cart function
+  const addToCart = () => {
+    if (!product) return;
+    
+    // Final validation check before adding to cart
+    if (quantity > product.stock) {
+      setStockError(`Sorry, only ${product.stock} items available in stock.`);
+      return;
+    }
+    
+    if (product.stock === 0) {
+      setStockError('This product is out of stock.');
+      return;
+    }
+    
+    setIsAddingToCart(true);
+    
+    // Here you would add the actual cart functionality
+    // For example, calling an API or updating a global cart state
+    
+    // Simulating API call with timeout
+    setTimeout(() => {
+      // Success - you would update your cart state here
+      alert(`Added ${quantity} ${product.name} to cart!`);
+      setIsAddingToCart(false);
+      
+      // Optional: Reset quantity after adding to cart
+      setQuantity(1);
+    }, 500);
   };
 
   return (
@@ -387,10 +427,30 @@ export default function ProductDetail() {
               <Text style={styles.totalPrice}>{calculateTotal()}</Text>
             </View>
             
-            <TouchableOpacity style={styles.addToCartButton}>
-              <Text style={styles.addToCartButtonText}>
-                Add {quantity > 1 ? `${quantity} items` : 'to Cart'}
-              </Text>
+            {/* Stock Error Message */}
+            {stockError && (
+              <View style={styles.errorMessageContainer}>
+                <Text style={styles.errorMessageText}>{stockError}</Text>
+              </View>
+            )}
+            
+            <TouchableOpacity 
+              style={[
+                styles.addToCartButton,
+                (product.stock === 0 || quantity > product.stock) && styles.disabledButton
+              ]}
+              disabled={product.stock === 0 || quantity > product.stock || isAddingToCart}
+              onPress={addToCart}
+            >
+              {isAddingToCart ? (
+                <ActivityIndicator size="small" color="#FFFFFF" />
+              ) : (
+                <Text style={styles.addToCartButtonText}>
+                  {product.stock === 0 
+                    ? 'Out of Stock' 
+                    : `Add ${quantity > 1 ? `${quantity} items` : 'to Cart'}`}
+                </Text>
+              )}
             </TouchableOpacity>
           </View>
         </ScrollView>
@@ -760,5 +820,22 @@ const styles = StyleSheet.create({
     fontWeight: '500',
     marginRight: 4,
     fontFamily: Platform.OS === 'ios' ? 'Futura-Medium' : 'sans-serif-medium',
+  },
+  errorMessageContainer: {
+    backgroundColor: '#FFEBEE',
+    borderWidth: 1,
+    borderColor: '#F44336',
+    borderRadius: 8,
+    padding: 12,
+    marginBottom: 16,
+  },
+  errorMessageText: {
+    color: '#D32F2F',
+    fontSize: 14,
+    fontWeight: '500',
+  },
+  disabledButton: {
+    backgroundColor: '#CCCCCC',
+    borderColor: '#999999',
   },
 });
