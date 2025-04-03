@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, Modal } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, Modal, Animated, LayoutAnimation } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
@@ -9,6 +9,32 @@ export default function UserHeader({ section = 'Home', compact = false }) {
   const router = useRouter();
   const colorScheme = useColorScheme();
   const [showLogoutModal, setShowLogoutModal] = useState(false);
+  const [menuExpanded, setMenuExpanded] = useState(false);
+  const [titleOpacity] = useState(new Animated.Value(1));
+
+  // Toggle menu function
+  const toggleMenu = () => {
+    // Configure layout animation for smoother transitions
+    LayoutAnimation.configureNext({
+      duration: 300,
+      create: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+        property: LayoutAnimation.Properties.opacity,
+      },
+      update: {
+        type: LayoutAnimation.Types.easeInEaseOut,
+      },
+    });
+    
+    // Animate title opacity
+    Animated.timing(titleOpacity, {
+      toValue: menuExpanded ? 1 : 0,
+      duration: 200,
+      useNativeDriver: true
+    }).start();
+    
+    setMenuExpanded(!menuExpanded);
+  };
 
   // LEGO studs for the top of bricks
   const renderStuds = (count: number) => {
@@ -80,7 +106,8 @@ export default function UserHeader({ section = 'Home', compact = false }) {
   return (
     <SafeAreaView style={[styles.safeArea, compact && styles.safeAreaCompact]}>
       <View style={[styles.container, compact && styles.containerCompact]}>
-        <View style={styles.leftSection}>
+        {/* Logo - only visible when menu is not expanded */}
+        {!menuExpanded && (
           <TouchableOpacity 
             style={[styles.logoContainer, compact && styles.logoContainerCompact]} 
             onPress={navigateToHome}
@@ -94,11 +121,36 @@ export default function UserHeader({ section = 'Home', compact = false }) {
               />
             </View>
           </TouchableOpacity>
-          {renderSectionTitle()}
-        </View>
-        <View style={styles.rightSection}>
-          {/* In compact mode, only show cart, orders and profile buttons */}
-          {!compact ? (
+        )}
+        
+        {/* Title section - hidden when menu is expanded */}
+        {!menuExpanded && (
+          <View style={styles.titleSection}>
+            <Animated.View style={{ opacity: titleOpacity }}>
+              {renderSectionTitle()}
+            </Animated.View>
+          </View>
+        )}
+        
+        <View style={[
+          styles.rightSection,
+          menuExpanded && styles.expandedRightSection
+        ]}>
+          {/* Menu toggle button - always visible */}
+          <TouchableOpacity 
+            style={[styles.legoButton, { backgroundColor: '#3498DB' }]}
+            onPress={toggleMenu}
+          >
+            <MaterialCommunityIcons 
+              name={menuExpanded ? "close" : "menu"} 
+              size={22} 
+              color="#FFFFFF" 
+            />
+            <View style={styles.buttonStud} />
+          </TouchableOpacity>
+          
+          {/* Menu items - only visible when expanded */}
+          {menuExpanded && (
             <>
               <TouchableOpacity 
                 style={styles.legoButton}
@@ -107,6 +159,7 @@ export default function UserHeader({ section = 'Home', compact = false }) {
                 <MaterialCommunityIcons name="account" size={22} color="#FFFFFF" />
                 <View style={styles.buttonStud} />
               </TouchableOpacity>
+              
               <TouchableOpacity 
                 style={[styles.legoButton, { backgroundColor: '#FFC500' }]}
                 onPress={() => alert('Notifications feature coming soon')}
@@ -114,43 +167,43 @@ export default function UserHeader({ section = 'Home', compact = false }) {
                 <MaterialCommunityIcons name="bell" size={22} color="#FFFFFF" />
                 <View style={styles.buttonStud} />
               </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.legoButton, { backgroundColor: '#9B59B6' }]}
+                onPress={navigateToOrders}
+              >
+                <MaterialCommunityIcons name="package-variant" size={22} color="#FFFFFF" />
+                <View style={styles.buttonStud} />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.legoButton, { backgroundColor: '#4CAF50' }]}
+                onPress={() => router.push('/Cart')}
+              >
+                <MaterialCommunityIcons name="cart" size={22} color="#FFFFFF" />
+                <View style={styles.buttonStud} />
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.legoButton, { backgroundColor: '#FF3A2F' }]}
+                onPress={() => setShowLogoutModal(true)}
+              >
+                <MaterialCommunityIcons name="logout" size={22} color="#FFFFFF" />
+                <View style={styles.buttonStud} />
+              </TouchableOpacity>
             </>
-          ) : null}
+          )}
           
-          {/* Orders Button */}
-          <TouchableOpacity 
-            style={[styles.legoButton, { backgroundColor: '#9B59B6' }]}
-            onPress={navigateToOrders}
-          >
-            <MaterialCommunityIcons 
-              name="package-variant" 
-              size={22} 
-              color="#FFFFFF" 
-            />
-            <View style={styles.buttonStud} />
-          </TouchableOpacity>
-          
-          {/* Cart Button */}
-          <TouchableOpacity 
-            style={[styles.legoButton, { backgroundColor: '#4CAF50' }]}
-            onPress={() => router.push('/Cart')}
-          >
-            <MaterialCommunityIcons 
-              name="cart" 
-              size={22} 
-              color="#FFFFFF" 
-            />
-            <View style={styles.buttonStud} />
-          </TouchableOpacity>
-          
-          {/* Logout Button */}
-          <TouchableOpacity 
-            style={[styles.legoButton, { backgroundColor: '#FF3A2F' }]}
-            onPress={() => setShowLogoutModal(true)}
-          >
-            <MaterialCommunityIcons name="logout" size={22} color="#FFFFFF" />
-            <View style={styles.buttonStud} />
-          </TouchableOpacity>
+          {/* Always show cart button if not expanded for quick access */}
+          {!menuExpanded && (
+            <TouchableOpacity 
+              style={[styles.legoButton, { backgroundColor: '#4CAF50' }]}
+              onPress={() => router.push('/Cart')}
+            >
+              <MaterialCommunityIcons name="cart" size={22} color="#FFFFFF" />
+              <View style={styles.buttonStud} />
+            </TouchableOpacity>
+          )}
         </View>
       </View>
 
@@ -261,9 +314,17 @@ const styles = StyleSheet.create({
   logoContainerCompact: {
     marginRight: 8,
   },
+  titleSection: {
+    flex: 1,
+  },
   rightSection: {
     flexDirection: 'row',
-    alignItems: 'center'
+    alignItems: 'center',
+  },
+  expandedRightSection: {
+    flex: 1,
+    justifyContent: 'flex-end',
+    width: '100%',
   },
   legoText: {
     fontSize: 22,

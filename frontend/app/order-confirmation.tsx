@@ -12,7 +12,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserHeader from '@/components/UserHeader';
-import { useNavigation, useRoute } from '@react-navigation/native';
+import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '@/env';
@@ -65,10 +65,19 @@ export default function OrderConfirmationScreen() {
     navigation.setOptions({
       headerShown: false,
     });
-    
-    // Load order details when component mounts
-    loadOrderDetails();
   }, []);
+  
+  // Load order details when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      loadOrderDetails();
+      
+      // Return a cleanup function if needed
+      return () => {
+        // Cleanup if necessary
+      };
+    }, [params?.orderId])
+  );
 
   const loadOrderDetails = async () => {
     try {
@@ -647,4 +656,4 @@ const styles = StyleSheet.create({
     borderBottomLeftRadius: 6,
     borderBottomRightRadius: 6,
   },
-}); 
+});
