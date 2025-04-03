@@ -95,8 +95,17 @@ const OrderSchema = new mongoose.Schema({
   },
   createdAt: {
     type: Date,
-    default: Date.now
+    default: Date.now,
+    get: function(date) {
+      if (date) {
+        return date.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+      }
+      return date;
+    }
   }
+}, {
+  toJSON: { getters: true },
+  toObject: { getters: true }
 });
 
 module.exports = mongoose.model('Order', OrderSchema);

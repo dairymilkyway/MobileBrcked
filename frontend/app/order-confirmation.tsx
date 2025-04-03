@@ -29,7 +29,7 @@ interface CartItem {
 
 interface OrderDetails {
   orderId: string;
-  orderDate: string;
+  createdAt: string;
   items: CartItem[];
   shippingDetails: {
     name: string;
@@ -122,17 +122,23 @@ export default function OrderConfirmationScreen() {
   const formatDate = (dateString: string) => {
     if (!dateString) return '';
     
+    // If the string is already in YYYY-MM-DD format, return it directly
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+      return dateString;
+    }
+    
     try {
+      // For ISO strings, extract the date part
+      if (dateString.includes('T')) {
+        const datePart = dateString.split('T')[0];
+        return datePart; // Returns yyyy-mm-dd directly
+      }
+      
+      // Otherwise, parse and format
       const date = new Date(dateString);
       
       // Check if date is valid
       if (isNaN(date.getTime())) {
-        // If invalid date, return the original string or parse it differently
-        // Try to format as yyyy-mm-dd manually
-        const parts = dateString.split('T')[0].split('-');
-        if (parts.length === 3) {
-          return `${parts[0]}-${parts[1]}-${parts[2]}`;
-        }
         return dateString;
       }
       
@@ -179,7 +185,7 @@ export default function OrderConfirmationScreen() {
               </Text>
               <Text style={styles.orderIdText}>Order ID: {order.orderId}</Text>
               <Text style={styles.orderDateText}>
-                Placed on: {formatDate(order.orderDate) || 'Processing date'}
+                Placed on: {formatDate(order.createdAt) || 'Processing date'}
               </Text>
             </View>
             

@@ -20,7 +20,7 @@ import { API_BASE_URL } from '@/env';
 // Order details interface
 interface OrderDetails {
   orderId: string;
-  orderDate: string;
+  createdAt: string;
   items: {
     id: number;
     productId: string;
@@ -88,7 +88,7 @@ export default function OrdersScreen() {
           if (data.success && Array.isArray(data.data)) {
             // Sort orders by date (newest first)
             data.data.sort((a: OrderDetails, b: OrderDetails) => {
-              return new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime();
+              return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
             });
             
             setOrders(data.data);
@@ -108,7 +108,7 @@ export default function OrdersScreen() {
         const loadedOrders = JSON.parse(ordersJson) as OrderDetails[];
         // Sort orders by date (newest first)
         loadedOrders.sort((a, b) => {
-          return new Date(b.orderDate).getTime() - new Date(a.orderDate).getTime();
+          return new Date(b.createdAt).getTime() - new Date(a.createdAt).getTime();
         });
         setOrders(loadedOrders);
       } else {
@@ -131,26 +131,26 @@ export default function OrdersScreen() {
   
   const formatDate = (dateString: string) => {
     if (!dateString) {
-      console.log('Empty date string received');
       return 'No date';
     }
     
-    console.log('Formatting date:', dateString);
+    // If the string is already in YYYY-MM-DD format, return it directly
+    if (/^\d{4}-\d{2}-\d{2}$/.test(dateString)) {
+      return dateString;
+    }
     
     try {
-      // For ISO strings, just extract the date part directly
+      // For ISO strings, extract the date part directly
       if (dateString.includes('T')) {
         const datePart = dateString.split('T')[0];
-        console.log('Extracted date part:', datePart);
         return datePart; // Returns yyyy-mm-dd directly
       }
       
+      // Otherwise, parse and format
       const date = new Date(dateString);
-      console.log('Parsed date object:', date);
       
       // Check if date is valid
       if (isNaN(date.getTime())) {
-        console.log('Invalid date after parsing');
         // Just return the original string if parsing failed
         return dateString;
       }
@@ -160,9 +160,7 @@ export default function OrdersScreen() {
       const month = String(date.getMonth() + 1).padStart(2, '0');
       const day = String(date.getDate()).padStart(2, '0');
       
-      const formatted = `${year}-${month}-${day}`;
-      console.log('Formatted date:', formatted);
-      return formatted;
+      return `${year}-${month}-${day}`;
     } catch (error) {
       console.error('Error formatting date:', error);
       return dateString || 'Date error';
@@ -230,7 +228,7 @@ export default function OrdersScreen() {
           <View style={styles.orderHeaderLeft}>
             <Text style={styles.orderIdText}>{item.orderId}</Text>
             <Text style={styles.orderDateText}>
-              Date: {item.orderDate ? formatDate(item.orderDate) : 'No date available'}
+              Order Placed Date: {item.createdAt ? formatDate(item.createdAt) : 'No date available'}
             </Text>
           </View>
           
