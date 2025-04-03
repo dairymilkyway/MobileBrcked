@@ -13,6 +13,7 @@ const cors = require('cors');
 const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer');
 const User = require('./models/User');
 const reviewRoutes = require('./apis/ReviewAPI');
 // Import the product routes
@@ -20,6 +21,7 @@ const productRoutes = require('./apis/ProductAPI');
 const userRoutes = require('./apis/UserAPI');
 const authenticateToken = require('./middleware/auth'); // ✅ Import auth middleware
 const { generateToken, blacklistToken, cleanupExpiredTokens } = require('./utils/tokenManager');
+const { uploadToCloudinary } = require('./utils/cloudinary');
 
 // Initialize express
 const app = express();
@@ -33,6 +35,18 @@ const corsOptions = {
 };
 
 app.use(cors(corsOptions));
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/');
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + '-' + file.originalname);
+  }
+});
+
+const upload = multer({ storage: storage });
 
 // Serve static files from the uploads directory
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
@@ -69,6 +83,11 @@ const initDatabases = async () => {
           type: DataTypes.STRING,
           allowNull: false
         },
+        email: {
+          type: DataTypes.STRING,
+          allowNull: true,
+          comment: 'User email associated with this token'
+        },
         token: {
           type: DataTypes.STRING,
           allowNull: false,
@@ -100,11 +119,33 @@ const initDatabases = async () => {
 
 // Initialize databases before starting server
 initDatabases().then(() => {
-  // ✅ Register route
-  app.post('/api/register', async (req, res) => {
+  // ✅ Register route with image upload
+  app.post('/api/register', upload.single('profilePicture'), async (req, res) => {
     try {
       const { username, email, password, role = 'user' } = req.body;
-      const user = new User({ username, email, password, role });
+      
+      let profilePicture = undefined;
+      
+      // If there's an uploaded file, upload it to Cloudinary
+      if (req.file) {
+        try {
+          const result = await uploadToCloudinary(req.file.path, 'brcked_users');
+          profilePicture = result.secure_url;
+          console.log('Profile picture uploaded to Cloudinary:', profilePicture);
+        } catch (uploadError) {
+          console.error('Error uploading to Cloudinary:', uploadError);
+          // Continue registration even if image upload fails
+        }
+      }
+      
+      const user = new User({ 
+        username, 
+        email, 
+        password, 
+        role,
+        ...(profilePicture && { profilePicture }),
+      });
+      
       await user.save();
       res.status(201).json({ message: 'User registered successfully' });
     } catch (err) {
@@ -121,12 +162,28 @@ initDatabases().then(() => {
         return res.status(401).json({ error: 'Invalid credentials' });
       }
 
+      // Get user ID as a string
+      const userId = user._id.toString();
+      
+      // Log user data for debugging
+      console.log('Login - User found:', { 
+        id: userId,
+        email: user.email,
+        role: user.role 
+      });
+      
       // ✅ Generate JWT token with 24 hour expiration and store in SQLite
       const token = await generateToken({ 
-        id: user._id.toString(), // Convert MongoDB ObjectId to string
-        role: user.role 
+        id: userId, // Explicitly named 'id' for consistency
+        role: user.role,
+        email: user.email
       }, '24h');
-      res.json({ token, role: user.role });
+      
+      res.json({ 
+        token, 
+        role: user.role,
+        userId: userId // Also return userId in the response
+      });
     } catch (err) {
       console.error('Login error:', err);
       res.status(500).json({ error: err.message });
@@ -334,6 +391,26 @@ initDatabases().then(() => {
 
   // Schedule token cleanup to run every day
   setInterval(cleanupExpiredTokens, 24 * 60 * 60 * 1000);
+
+  // Debug route to check token contents
+  app.get('/api/debug/token', authenticateToken, (req, res) => {
+    try {
+      // Return the decoded token payload
+      res.json({
+        message: 'Your decoded token:',
+        user: req.user,
+        tokenContains: {
+          id: req.user.id ? 'Present' : 'Missing',
+          _id: req.user._id ? 'Present' : 'Missing',
+          role: req.user.role ? 'Present' : 'Missing',
+          email: req.user.email ? 'Present' : 'Missing',
+        }
+      });
+    } catch (err) {
+      console.error('Error in debug token route:', err);
+      res.status(500).json({ error: err.message });
+    }
+  });
 
   // ✅ Start server
   const PORT = process.env.PORT || 9000;

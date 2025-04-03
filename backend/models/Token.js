@@ -8,6 +8,11 @@ const Token = sequelize.define('Token', {
     allowNull: false,
     comment: 'The MongoDB user ID'
   },
+  email: {
+    type: DataTypes.STRING,
+    allowNull: true,
+    comment: 'User email associated with this token'
+  },
   token: {
     type: DataTypes.STRING,
     allowNull: false,

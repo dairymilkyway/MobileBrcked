@@ -39,6 +39,10 @@ export default function UserHeader({ section = 'Home', compact = false }) {
   const navigateToHome = () => {
     router.push('/user/home');  // Navigate to the home screen
   };
+  
+  const navigateToProfile = () => {
+    router.push('/user/profile');  // Navigate to the profile screen
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, compact && styles.safeAreaCompact]}>
@@ -67,7 +71,7 @@ export default function UserHeader({ section = 'Home', compact = false }) {
             <>
               <TouchableOpacity 
                 style={styles.legoButton}
-                onPress={() => alert('Profile feature coming soon')}
+                onPress={navigateToProfile}
               >
                 <MaterialCommunityIcons name="account" size={22} color="#FFFFFF" />
                 <View style={styles.buttonStud} />

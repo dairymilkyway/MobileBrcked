@@ -118,6 +118,11 @@ export default function LoginScreen() {
         console.log('Login response role:', data.role);
         
         if (response.ok && data.token) {
+          // Clear any existing tokens first
+          await AsyncStorage.removeItem('token');
+          await AsyncStorage.removeItem('userToken');
+          await AsyncStorage.removeItem('userRole');
+          
           // Ensure we save the token in BOTH places to maintain consistency
           console.log('Saving token to AsyncStorage, token length:', data.token.length);
           
@@ -133,6 +138,26 @@ export default function LoginScreen() {
           // Verify token was saved
           const savedToken = await AsyncStorage.getItem('token');
           console.log('Verified saved token length:', savedToken ? savedToken.length : 0);
+
+          // Check token with a test call to debug endpoint
+          try {
+            const testResponse = await fetch(`${API_BASE_URL}/debug/token`, {
+              headers: {
+                'Authorization': `Bearer ${data.token}`,
+                'Accept': 'application/json',
+              },
+            });
+            
+            if (testResponse.ok) {
+              const testData = await testResponse.json();
+              console.log('Token debug info:', testData);
+            } else {
+              console.warn('Token debug test failed, but continuing anyway');
+            }
+          } catch (testError) {
+            console.warn('Token test error:', testError);
+            // Continue with login flow anyway
+          }
 
           Alert.alert('Success', 'Logged in successfully');
           

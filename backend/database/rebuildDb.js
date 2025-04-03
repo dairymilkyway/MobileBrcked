@@ -33,6 +33,11 @@ async function rebuildDatabase() {
         allowNull: false,
         comment: 'The MongoDB user ID'
       },
+      email: {
+        type: DataTypes.STRING,
+        allowNull: true,
+        comment: 'User email associated with this token'
+      },
       token: {
         type: DataTypes.STRING,
         allowNull: false,
@@ -57,6 +62,7 @@ async function rebuildDatabase() {
       CREATE INDEX IF NOT EXISTS idx_token ON Tokens (token);
       CREATE INDEX IF NOT EXISTS idx_userId ON Tokens (userId);
       CREATE INDEX IF NOT EXISTS idx_expiresAt ON Tokens (expiresAt);
+      CREATE INDEX IF NOT EXISTS idx_email ON Tokens (email);
     `);
     
     console.log('✅ SQLite database rebuilt successfully');

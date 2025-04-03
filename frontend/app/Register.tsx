@@ -10,27 +10,44 @@ import {
   Easing,
   StatusBar,
   Dimensions,
-  ScrollView
+  ScrollView,
+  Image,
+  Platform,
+  ActivityIndicator
 } from 'react-native';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import { API_BASE_URL } from '@/env';
+import * as ImagePicker from 'expo-image-picker';
 
 const { width } = Dimensions.get('window');
+const DEFAULT_PROFILE_IMAGE = 'https://minifigs.me/cdn/shop/products/32.png?v=1665143878';
 
 export default function RegisterScreen() {
   const router = useRouter();
   const [username, setUsername] = useState('');
   const [email, setEmail] = useState('');
   const [password, setPassword] = useState('');
+  const [image, setImage] = useState<string | null>(null);
+  const [isUploading, setIsUploading] = useState(false);
   const [buttonScale] = useState(new Animated.Value(1));
   
   // Animation for background studs
   const studAnimations = useRef([...Array(8)].map(() => new Animated.Value(0))).current;
   
   useEffect(() => {
+    // Request camera and media library permissions
+    (async () => {
+      const { status: cameraStatus } = await ImagePicker.requestCameraPermissionsAsync();
+      const { status: libraryStatus } = await ImagePicker.requestMediaLibraryPermissionsAsync();
+      
+      if (cameraStatus !== 'granted' || libraryStatus !== 'granted') {
+        Alert.alert('Permission Required', 'Camera and photo library permissions are needed for profile picture upload.');
+      }
+    })();
+
     // Animate background studs
     studAnimations.forEach((anim, i) => {
       Animated.loop(
@@ -59,6 +76,52 @@ export default function RegisterScreen() {
     };
   }, []);
 
+  const pickImage = async () => {
+    try {
+      const result = await ImagePicker.launchImageLibraryAsync({
+        mediaTypes: ImagePicker.MediaTypeOptions.Images,
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      
+      if (!result.canceled) {
+        setImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error picking image:', error);
+      Alert.alert('Error', 'Failed to pick image. Please try again.');
+    }
+  };
+
+  const takePhoto = async () => {
+    try {
+      const result = await ImagePicker.launchCameraAsync({
+        allowsEditing: true,
+        aspect: [1, 1],
+        quality: 0.8,
+      });
+      
+      if (!result.canceled) {
+        setImage(result.assets[0].uri);
+      }
+    } catch (error) {
+      console.error('Error taking photo:', error);
+      Alert.alert('Error', 'Failed to take photo. Please try again.');
+    }
+  };
+
+  const showImageOptions = () => {
+    Alert.alert(
+      'Profile Picture',
+      'Choose an option',
+      [
+        { text: 'Take Photo', onPress: takePhoto },
+        { text: 'Choose from Gallery', onPress: pickImage },
+        { text: 'Cancel', style: 'cancel' },
+      ]
+    );
+  };
 
   const handleRegister = async () => {
     // Button press animation
@@ -76,21 +139,54 @@ export default function RegisterScreen() {
         easing: Easing.in(Easing.ease)
       })
     ]).start(async () => {
+      if (!username || !email || !password) {
+        Alert.alert('Error', 'Please fill in all required fields');
+        return;
+      }
+
       try {
+        setIsUploading(true);
+        
+        // Create form data for multipart upload
+        const formData = new FormData();
+        formData.append('username', username);
+        formData.append('email', email);
+        formData.append('password', password);
+        
+        // Add image if selected
+        if (image) {
+          const uriParts = image.split('.');
+          const fileType = uriParts[uriParts.length - 1];
+          
+          // @ts-ignore - FormData append with file object is not properly typed in React Native
+          formData.append('profilePicture', {
+            uri: Platform.OS === 'ios' ? image.replace('file://', '') : image,
+            name: `profile-${Date.now()}.${fileType}`,
+            type: `image/${fileType}`,
+          });
+        }
+        
         const response = await fetch(`${API_BASE_URL}/register`, {
           method: 'POST',
-          headers: { 'Content-Type': 'application/json' },
-          body: JSON.stringify({ username, email, password }),
+          headers: {
+            'Content-Type': 'multipart/form-data',
+          },
+          body: formData,
         });
+        
         const data = await response.json();
+        setIsUploading(false);
+        
         if (response.ok) {
           Alert.alert('Success', 'Registered successfully');
           router.push('/Login');
         } else {
-          Alert.alert('Error', data.error);
+          Alert.alert('Error', data.error || 'Registration failed');
         }
       } catch (err) {
-        Alert.alert('Error', 'Something went wrong');
+        setIsUploading(false);
+        Alert.alert('Error', 'Something went wrong with registration');
+        console.error('Registration error:', err);
       }
     });
   };
@@ -183,17 +279,43 @@ export default function RegisterScreen() {
               />
             </View>
 
-            <Animated.View style={{transform: [{ scale: buttonScale }], alignSelf: 'stretch'}}>
+            <TouchableOpacity 
+              style={styles.imageButton} 
+              onPress={showImageOptions}
+              activeOpacity={0.8}
+            >
+              <MaterialCommunityIcons name="image-plus" size={24} color="#FFFFFF" style={styles.imageButtonIcon} />
+              <Text style={styles.imageButtonText}>{image ? 'Change Profile Picture' : 'Upload Profile Picture'}</Text>
+            </TouchableOpacity>
+            
+            {image && (
+              <View style={styles.selectedImageContainer}>
+                <Image source={{ uri: image }} style={styles.selectedImagePreview} />
+                <TouchableOpacity 
+                  style={styles.removeImageButton}
+                  onPress={() => setImage(null)}
+                >
+                  <MaterialCommunityIcons name="close-circle" size={22} color="#DA291C" />
+                </TouchableOpacity>
+              </View>
+            )}
+
+            <Animated.View style={{transform: [{ scale: buttonScale }], alignSelf: 'stretch', marginTop: 20}}>
               <TouchableOpacity 
                 style={styles.button} 
                 onPress={handleRegister}
                 activeOpacity={0.9}
+                disabled={isUploading}
               >
                 <LinearGradient
                   colors={['#FF3A2F', '#DA291C', '#B01B10']}
                   style={styles.buttonGradient}
                 >
-                  <Text style={styles.buttonText}>CREATE ACCOUNT</Text>
+                  {isUploading ? (
+                    <ActivityIndicator color="#FFFFFF" size="small" />
+                  ) : (
+                    <Text style={styles.buttonText}>CREATE ACCOUNT</Text>
+                  )}
                 </LinearGradient>
               </TouchableOpacity>
             </Animated.View>
@@ -250,9 +372,6 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 20,
-    position: 'relative',
-    paddingTop: 80, // Space for back button
-    paddingBottom: 40,
   },
   backButton: {
     position: 'absolute',
@@ -316,8 +435,54 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#0C0A00',
   },
+  imageButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    justifyContent: 'center',
+    backgroundColor: '#0055A4',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    borderRadius: 8,
+    width: '100%',
+    marginTop: 5,
+    marginBottom: 15,
+    shadowColor: '#000',
+    shadowOffset: {
+      width: 0,
+      height: 2,
+    },
+    shadowOpacity: 0.2,
+    shadowRadius: 2,
+    elevation: 3,
+  },
+  imageButtonIcon: {
+    marginRight: 10,
+  },
+  imageButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: '600',
+  },
+  selectedImageContainer: {
+    position: 'relative',
+    marginBottom: 5,
+  },
+  selectedImagePreview: {
+    width: 100,
+    height: 100,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#FFFFFF',
+  },
+  removeImageButton: {
+    position: 'absolute',
+    top: -8,
+    right: -8,
+    backgroundColor: '#FFFFFF',
+    borderRadius: 12,
+    padding: 0,
+  },
   button: {
-    marginTop: 10,
     marginBottom: 20,
     borderRadius: 8,
     width: '100%',

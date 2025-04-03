@@ -395,4 +395,53 @@ export const logout = async () => {
     }
     return false;
   }
+};
+
+// Update user profile
+export const updateUserProfile = async (userData: {
+  username?: string;
+  email?: string;
+  currentPassword?: string;
+  newPassword?: string;
+} | FormData) => {
+  try {
+    const token = await getToken();
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+    
+    console.log('Making API call to update user profile');
+    console.log('Token preview:', token ? `${token.substring(0, 10)}...` : 'None');
+    
+    // Check if userData is FormData
+    const isFormData = userData instanceof FormData;
+    
+    const response = await fetch(`${API_BASE_URL}/users/profile`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        ... (!isFormData ? {'Content-Type': 'application/json'} : {}),
+        'Accept': 'application/json',
+      },
+      body: isFormData ? userData : JSON.stringify(userData),
+    });
+    
+    const result = await response.json();
+    console.log('API response status:', response.status);
+    
+    if (!response.ok) {
+      // Check if authentication error
+      if (response.status === 401 || response.status === 403) {
+        await handleAuthError();
+        throw new Error('Your session has expired. Please log in again.');
+      }
+      
+      throw new Error(result.message || result.error || 'Failed to update user profile');
+    }
+    
+    return result.data;
+  } catch (error) {
+    console.error('Error updating user profile:', error);
+    throw error;
+  }
 }; 

@@ -28,23 +28,35 @@ exports.generateToken = async (userData, expiresIn = '24h') => {
     
     while (attempts < 3 && !success) {
       try {
-        // First check if token already exists
-        const existingToken = await Token.findOne({ where: { token } });
-        if (existingToken) {
-          // If it exists but has same userId, we can reuse it
-          if (existingToken.userId === userData.id) {
-            success = true;
-            break;
-          }
-        }
-        
-        // Create new token record
-        await Token.create({
-          userId: userData.id,
-          token,
-          expiresAt,
-          blacklisted: false
+        // Check if user already has a token
+        const existingUserToken = await Token.findOne({ 
+          where: { 
+            userId: userData.id,
+            blacklisted: false
+          } 
         });
+        
+        if (existingUserToken) {
+          // Update the existing token record instead of creating a new one
+          await Token.update({
+            token,
+            expiresAt,
+            email: userData.email
+          }, {
+            where: { id: existingUserToken.id }
+          });
+          console.log(`Updated existing token for user ${userData.id}`);
+        } else {
+          // Create new token record if no active token exists
+          await Token.create({
+            userId: userData.id,
+            email: userData.email,
+            token,
+            expiresAt,
+            blacklisted: false
+          });
+          console.log(`Created new token for user ${userData.id}`);
+        }
         success = true;
       } catch (error) {
         lastError = error;
@@ -75,23 +87,42 @@ exports.generateToken = async (userData, expiresIn = '24h') => {
  */
 exports.verifyToken = async (token) => {
   try {
+    console.log('verifyToken: Starting token verification');
+    
     // First verify the token with JWT
     const decoded = jwt.verify(token, process.env.JWT_SECRET);
+    console.log('verifyToken: JWT verification passed');
     
     // Then check if it's in database and not blacklisted
     try {
       const tokenRecord = await Token.findOne({ where: { token } });
-      if (tokenRecord && tokenRecord.blacklisted) {
-        return null; // Token is blacklisted
+      
+      if (tokenRecord) {
+        console.log('verifyToken: Token found in database, blacklisted:', tokenRecord.blacklisted);
+        if (tokenRecord.blacklisted) {
+          return null; // Token is blacklisted
+        }
+      } else {
+        console.log('verifyToken: Token not found in database, but JWT verification passed');
+        // If token is not in database but JWT verifies, we'll accept it
+        // This helps if database had issues during token creation
       }
     } catch (dbError) {
-      console.error('Database error checking token blacklist:', dbError);
+      console.error('verifyToken: Database error checking token blacklist:', dbError);
       // If db check fails, rely on JWT verification alone
+      console.log('verifyToken: Falling back to JWT verification only');
     }
+    
+    // Add debug info before returning
+    console.log('verifyToken: Token verification successful, decoded token contains:', {
+      id: decoded.id || 'missing',
+      role: decoded.role || 'missing',
+      exp: decoded.exp ? new Date(decoded.exp * 1000).toISOString() : 'missing'
+    });
     
     return decoded;
   } catch (error) {
-    console.error('Error verifying token:', error);
+    console.error('verifyToken: Error verifying token:', error.message);
     return null;
   }
 };
@@ -119,6 +150,7 @@ exports.blacklistToken = async (token) => {
         if (decoded && decoded.exp) {
           await Token.create({
             userId: decoded.id || 'unknown',
+            email: decoded.email || null,
             token,
             expiresAt: new Date(decoded.exp * 1000),
             blacklisted: true

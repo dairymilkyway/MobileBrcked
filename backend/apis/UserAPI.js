@@ -2,6 +2,119 @@ const express = require('express');
 const router = express.Router();
 const User = require('../models/User');
 const authenticateToken = require('../middleware/auth');
+const multer = require('multer');
+const { uploadToCloudinary } = require('../utils/cloudinary');
+const path = require('path');
+const fs = require('fs');
+
+// Configure multer for file uploads
+const storage = multer.diskStorage({
+  destination: function (req, file, cb) {
+    cb(null, 'uploads/');
+  },
+  filename: function (req, file, cb) {
+    cb(null, Date.now() + '-' + file.originalname);
+  }
+});
+
+const upload = multer({ storage: storage });
+
+// Get user profile (for authenticated user)
+router.get('/profile', authenticateToken, async (req, res) => {
+    try {
+        // Get the user's ID from the authenticated token
+        const userId = req.user.id;
+        
+        // Get user from database (excluding password)
+        const user = await User.findById(userId).select('-password');
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        res.json({ data: user });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
+
+// Update user profile (for authenticated user)
+router.put('/profile', authenticateToken, upload.single('profilePicture'), async (req, res) => {
+    try {
+        // Get the user's ID from the authenticated token
+        const userId = req.user.id;
+        
+        const { username, email, currentPassword, newPassword } = req.body;
+        
+        // Find the user
+        const user = await User.findById(userId);
+        if (!user) {
+            return res.status(404).json({ error: 'User not found' });
+        }
+        
+        // Create update object
+        const updateData = {};
+        
+        // Update email if provided and different
+        if (email && email !== user.email) {
+            // Check if email is already in use by another user
+            const existingUser = await User.findOne({ email, _id: { $ne: userId } });
+            if (existingUser) {
+                return res.status(400).json({ error: 'Email already in use by another account' });
+            }
+            updateData.email = email;
+        }
+        
+        // Update username if provided and different
+        if (username && username !== user.username) {
+            // Check if username is already in use by another user
+            const existingUser = await User.findOne({ username, _id: { $ne: userId } });
+            if (existingUser) {
+                return res.status(400).json({ error: 'Username already in use by another account' });
+            }
+            updateData.username = username;
+        }
+        
+        // If user wants to change password
+        if (currentPassword && newPassword) {
+            // Verify current password
+            const isMatch = await user.comparePassword(currentPassword);
+            if (!isMatch) {
+                return res.status(400).json({ error: 'Current password is incorrect' });
+            }
+            
+            // Set new password
+            updateData.password = newPassword;
+        }
+        
+        // Handle profile picture upload if file is provided
+        if (req.file) {
+            try {
+                const result = await uploadToCloudinary(req.file.path, 'brcked_users');
+                updateData.profilePicture = result.secure_url;
+                console.log('Profile picture uploaded to Cloudinary:', result.secure_url);
+            } catch (uploadError) {
+                console.error('Error uploading to Cloudinary:', uploadError);
+                // Continue even if image upload fails
+            }
+        }
+        
+        // Only update if there are changes
+        if (Object.keys(updateData).length === 0) {
+            return res.status(400).json({ error: 'No changes to update' });
+        }
+        
+        // Update user
+        const updatedUser = await User.findByIdAndUpdate(
+            userId,
+            updateData,
+            { new: true, runValidators: true }
+        ).select('-password');
+        
+        res.json({ data: updatedUser, message: 'Profile updated successfully' });
+    } catch (err) {
+        res.status(500).json({ error: err.message });
+    }
+});
 
 // Get all users (admin only)
 router.get('/', authenticateToken, async (req, res) => {
