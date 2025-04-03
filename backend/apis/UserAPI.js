@@ -28,12 +28,32 @@ router.get('/profile', authenticateToken, async (req, res) => {
         // Get user from database (excluding password)
         const user = await User.findById(userId).select('-password');
         if (!user) {
-            return res.status(404).json({ error: 'User not found' });
+            return res.status(404).json({ success: false, error: 'User not found' });
         }
         
-        res.json({ data: user });
+        res.json({ success: true, data: user });
     } catch (err) {
-        res.status(500).json({ error: err.message });
+        console.error('Error fetching user profile:', err);
+        res.status(500).json({ success: false, error: err.message });
+    }
+});
+
+// Get current user info (alternative endpoint for '/profile')
+router.get('/me', authenticateToken, async (req, res) => {
+    try {
+        // Get the user's ID from the authenticated token
+        const userId = req.user.id;
+        
+        // Get user from database (excluding password)
+        const user = await User.findById(userId).select('-password');
+        if (!user) {
+            return res.status(404).json({ success: false, error: 'User not found' });
+        }
+        
+        res.json({ success: true, data: user });
+    } catch (err) {
+        console.error('Error fetching current user data:', err);
+        res.status(500).json({ success: false, error: err.message });
     }
 });
 

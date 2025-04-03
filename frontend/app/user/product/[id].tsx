@@ -9,7 +9,9 @@ import {
   Platform,
   ActivityIndicator,
   Dimensions,
-  FlatList
+  FlatList,
+  Modal,
+  Animated
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
@@ -17,6 +19,7 @@ import { API_BASE_URL } from '@/env';
 import UserHeader from '@/components/UserHeader';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AntDesign } from '@expo/vector-icons';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 const FETCH_TIMEOUT = 10000;
 
 interface Product {
@@ -47,6 +50,8 @@ export default function ProductDetail() {
   const [ratings, setRatings] = useState<RatingData>({ averageRating: 0, totalReviews: 0 });
   const [stockError, setStockError] = useState<string | null>(null);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
+  const [showSuccessPopup, setShowSuccessPopup] = useState(false);
+  const popupAnimation = useRef(new Animated.Value(0)).current;
   
   // Sample images for demonstration - in real implementation, these would come from the product data
   const [productImages, setProductImages] = useState<string[]>([]);
@@ -242,7 +247,7 @@ export default function ProductDetail() {
   };
 
   // Add to Cart function
-  const addToCart = () => {
+  const addToCart = async () => {
     if (!product) return;
     
     // Final validation check before adding to cart
@@ -256,20 +261,91 @@ export default function ProductDetail() {
       return;
     }
     
+    // Log the quantity value to verify it's correct
+    console.log('Adding to cart with quantity:', quantity);
+    
     setIsAddingToCart(true);
     
-    // Here you would add the actual cart functionality
-    // For example, calling an API or updating a global cart state
-    
-    // Simulating API call with timeout
-    setTimeout(() => {
-      // Success - you would update your cart state here
-      alert(`Added ${quantity} ${product.name} to cart!`);
-      setIsAddingToCart(false);
+    try {
+      // Get auth token from AsyncStorage
+      const token = await AsyncStorage.getItem('token');
       
-      // Optional: Reset quantity after adding to cart
-      setQuantity(1);
-    }, 500);
+      if (!token) {
+        setStockError('You need to login to add items to cart');
+        setIsAddingToCart(false);
+        return;
+      }
+      
+      // Ensure quantity is a number
+      const numericQuantity = Number(quantity);
+      
+      // Create the request payload
+      const payload = {
+        productId: product._id,
+        productName: product.name,
+        price: product.price,
+        quantity: numericQuantity, // Make sure it's a number
+        imageURL: product.imageURL && product.imageURL.length > 0 ? product.imageURL[0] : null
+      };
+      
+      // Log the payload for debugging
+      console.log('Cart payload:', JSON.stringify(payload));
+      
+      // Make API call to add item to cart
+      const response = await fetch(`${API_BASE_URL}/cart/add`, {
+        method: 'POST',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify(payload)
+      });
+      
+      const data = await response.json();
+      
+      // Log the response for debugging
+      console.log('Cart API response:', JSON.stringify(data));
+      
+      if (data.success) {
+        // Show success popup instead of alert
+        setShowSuccessPopup(true);
+        
+        // Animate popup entry
+        Animated.spring(popupAnimation, {
+          toValue: 1,
+          tension: 70,
+          friction: 7,
+          useNativeDriver: true
+        }).start();
+        
+        // Auto-hide after 2.5 seconds
+        setTimeout(() => {
+          hideSuccessPopup();
+        }, 2500);
+        
+        // Reset quantity after adding to cart
+        setQuantity(1);
+      } else {
+        // Handle error
+        setStockError(data.message || 'Failed to add item to cart');
+      }
+    } catch (error) {
+      console.error('Error adding to cart:', error);
+      setStockError('Failed to add item to cart. Please try again.');
+    } finally {
+      setIsAddingToCart(false);
+    }
+  };
+  
+  // Function to hide the success popup with animation
+  const hideSuccessPopup = () => {
+    Animated.timing(popupAnimation, {
+      toValue: 0,
+      duration: 300,
+      useNativeDriver: true
+    }).start(() => {
+      setShowSuccessPopup(false);
+    });
   };
 
   return (
@@ -459,6 +535,68 @@ export default function ProductDetail() {
           <Text style={styles.errorText}>Product not found</Text>
         </View>
       )}
+      
+      {/* Success Popup Modal */}
+      <Modal
+        transparent={true}
+        visible={showSuccessPopup}
+        animationType="none"
+        onRequestClose={hideSuccessPopup}
+      >
+        <View style={styles.modalOverlay}>
+          <Animated.View 
+            style={[
+              styles.successPopup,
+              {
+                transform: [
+                  { scale: popupAnimation },
+                  { 
+                    translateY: popupAnimation.interpolate({
+                      inputRange: [0, 1],
+                      outputRange: [50, 0]
+                    })
+                  }
+                ],
+                opacity: popupAnimation
+              }
+            ]}
+          >
+            {/* Top row of LEGO studs */}
+            <View style={styles.popupStudsRow}>
+              {[...Array(4)].map((_, i) => (
+                <View key={i} style={styles.popupStud}>
+                  <View style={styles.popupStudInner} />
+                </View>
+              ))}
+            </View>
+            
+            <View style={styles.popupContent}>
+              <MaterialCommunityIcons name="check-circle" size={50} color="#4CAF50" style={styles.popupIcon} />
+              <Text style={styles.popupTitle}>Item Added to Cart!</Text>
+              
+              <TouchableOpacity 
+                style={styles.popupButton}
+                onPress={() => {
+                  hideSuccessPopup();
+                  router.push('/user/home');  // Redirect to home page (index.tsx)
+                }}
+              >
+                <Text style={styles.popupButtonText}>CONTINUE SHOPPING</Text>
+              </TouchableOpacity>
+              
+              <TouchableOpacity 
+                style={[styles.popupButton, styles.viewCartButton]}
+                onPress={() => {
+                  hideSuccessPopup();
+                  router.push('/Cart');
+                }}
+              >
+                <Text style={[styles.popupButtonText, styles.viewCartButtonText]}>VIEW CART</Text>
+              </TouchableOpacity>
+            </View>
+          </Animated.View>
+        </View>
+      </Modal>
     </View>
   );
 }
@@ -837,5 +975,97 @@ const styles = StyleSheet.create({
   disabledButton: {
     backgroundColor: '#CCCCCC',
     borderColor: '#999999',
+  },
+  // Success Popup Styles
+  modalOverlay: {
+    flex: 1,
+    backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  successPopup: {
+    width: '90%',
+    maxWidth: 350,
+    backgroundColor: '#FFFFFF',
+    borderWidth: 3,
+    borderColor: '#000000',
+    borderRadius: 10,
+    overflow: 'hidden',
+    ...Platform.select({
+      ios: {
+        shadowColor: '#000',
+        shadowOffset: { width: 0, height: 5 },
+        shadowOpacity: 0.5,
+        shadowRadius: 5,
+      },
+      android: {
+        elevation: 10,
+      },
+    }),
+  },
+  popupStudsRow: {
+    flexDirection: 'row',
+    backgroundColor: '#FFE500', // LEGO yellow
+    paddingVertical: 6,
+    paddingHorizontal: 10,
+    justifyContent: 'space-around',
+    borderBottomWidth: 3,
+    borderBottomColor: '#000000',
+  },
+  popupStud: {
+    width: 24,
+    height: 24,
+    borderRadius: 12,
+    backgroundColor: '#FFE500',
+    borderWidth: 2,
+    borderColor: '#000000',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  popupStudInner: {
+    width: 12,
+    height: 12,
+    borderRadius: 6,
+    backgroundColor: '#E3000B',
+    borderWidth: 1,
+    borderColor: '#000000',
+  },
+  popupContent: {
+    padding: 20,
+    alignItems: 'center',
+  },
+  popupIcon: {
+    marginBottom: 10,
+  },
+  popupTitle: {
+    fontSize: 24,
+    fontWeight: 'bold',
+    color: '#E3000B', // LEGO red
+    marginBottom: 10,
+    fontFamily: Platform.OS === 'ios' ? 'Futura-Bold' : 'sans-serif-condensed',
+  },
+  popupButton: {
+    backgroundColor: '#006DB7', // LEGO blue
+    paddingVertical: 12,
+    paddingHorizontal: 20,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#000000',
+    width: '100%',
+    alignItems: 'center',
+    marginBottom: 10,
+  },
+  popupButtonText: {
+    color: '#FFFFFF',
+    fontWeight: 'bold',
+    fontSize: 16,
+    fontFamily: Platform.OS === 'ios' ? 'Futura-Bold' : 'sans-serif-condensed',
+  },
+  viewCartButton: {
+    backgroundColor: '#E3000B', // LEGO red
+  },
+  viewCartButtonText: {
+    color: '#FFFFFF',
   },
 });

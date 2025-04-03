@@ -43,6 +43,39 @@ export default function UserHeader({ section = 'Home', compact = false }) {
   const navigateToProfile = () => {
     router.push('/user/profile');  // Navigate to the profile screen
   };
+  
+  const navigateToOrders = () => {
+    router.push('/orders');  // Navigate to the orders screen
+  };
+
+  const renderSectionTitle = () => {
+    if (section === 'My Orders') {
+      return (
+        <View style={styles.stackedTitleContainer}>
+          <Text style={[styles.stackedTitleText, compact && styles.stackedTitleTextCompact]}>My</Text>
+          <Text style={[styles.stackedTitleText, compact && styles.stackedTitleTextCompact]}>Orders</Text>
+        </View>
+      );
+    }
+    
+    if (section === 'Checkout') {
+      return (
+        <View style={styles.stackedTitleContainer}>
+          <Text style={[styles.stackedTitleText, compact && styles.stackedTitleTextCompact]}>Check</Text>
+          <Text style={[styles.stackedTitleText, compact && styles.stackedTitleTextCompact]}>out</Text>
+        </View>
+      );
+    }
+    
+    return (
+      <Text style={[
+        styles.sectionText, 
+        compact && styles.sectionTextCompact
+      ]}>
+        {section}
+      </Text>
+    );
+  };
 
   return (
     <SafeAreaView style={[styles.safeArea, compact && styles.safeAreaCompact]}>
@@ -61,12 +94,10 @@ export default function UserHeader({ section = 'Home', compact = false }) {
               />
             </View>
           </TouchableOpacity>
-          <Text style={[styles.sectionText, compact && styles.sectionTextCompact]}>
-            {section}
-          </Text>
+          {renderSectionTitle()}
         </View>
         <View style={styles.rightSection}>
-          {/* In compact mode, only show cart and profile buttons */}
+          {/* In compact mode, only show cart, orders and profile buttons */}
           {!compact ? (
             <>
               <TouchableOpacity 
@@ -85,6 +116,21 @@ export default function UserHeader({ section = 'Home', compact = false }) {
               </TouchableOpacity>
             </>
           ) : null}
+          
+          {/* Orders Button */}
+          <TouchableOpacity 
+            style={[styles.legoButton, { backgroundColor: '#9B59B6' }]}
+            onPress={navigateToOrders}
+          >
+            <MaterialCommunityIcons 
+              name="package-variant" 
+              size={22} 
+              color="#FFFFFF" 
+            />
+            <View style={styles.buttonStud} />
+          </TouchableOpacity>
+          
+          {/* Cart Button */}
           <TouchableOpacity 
             style={[styles.legoButton, { backgroundColor: '#4CAF50' }]}
             onPress={() => router.push('/Cart')}
@@ -96,6 +142,8 @@ export default function UserHeader({ section = 'Home', compact = false }) {
             />
             <View style={styles.buttonStud} />
           </TouchableOpacity>
+          
+          {/* Logout Button */}
           <TouchableOpacity 
             style={[styles.legoButton, { backgroundColor: '#FF3A2F' }]}
             onPress={() => setShowLogoutModal(true)}
@@ -242,6 +290,9 @@ const styles = StyleSheet.create({
   },
   sectionTextCompact: {
     fontSize: 16,
+  },
+  ordersText: {
+    fontSize: 14,
   },
   legoButton: {
     padding: 8,
@@ -394,5 +445,26 @@ const styles = StyleSheet.create({
     alignSelf: 'center',
     borderBottomLeftRadius: 6,
     borderBottomRightRadius: 6,
+  },
+  stackedTitleContainer: {
+    flexDirection: 'column',
+    alignItems: 'flex-start',
+    justifyContent: 'center',
+  },
+  stackedTitleText: {
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#FFFFFF',
+    fontFamily: Platform.select({
+      ios: 'Futura-Medium',
+      android: 'sans-serif-medium',
+      default: 'System'
+    }),
+    textTransform: 'uppercase',
+    lineHeight: 18,
+  },
+  stackedTitleTextCompact: {
+    fontSize: 14,
+    lineHeight: 16,
   },
 });

@@ -19,6 +19,8 @@ const reviewRoutes = require('./apis/ReviewAPI');
 // Import the product routes
 const productRoutes = require('./apis/ProductAPI');
 const userRoutes = require('./apis/UserAPI');
+const cartRoutes = require('./apis/CartAPI'); // Import cart routes
+const orderRoutes = require('./apis/OrderAPI'); // Import order routes
 const authenticateToken = require('./middleware/auth'); // ✅ Import auth middleware
 const { generateToken, blacklistToken, cleanupExpiredTokens } = require('./utils/tokenManager');
 const { uploadToCloudinary } = require('./utils/cloudinary');
@@ -64,7 +66,7 @@ const initDatabases = async () => {
   // Initialize SQLite database by importing the Token model
   try {
     // First check if the file exists and is not empty
-    const dbPath = path.join(__dirname, 'database', 'tokens.sqlite');
+    const dbPath = path.join(__dirname, 'database', 'database.sqlite');
     const needsRebuild = !fs.existsSync(dbPath) || fs.statSync(dbPath).size < 100;
     
     if (needsRebuild) {
@@ -212,6 +214,12 @@ initDatabases().then(() => {
 
   // Use review routes - update this line for consistency
   app.use('/api/reviews', reviewRoutes);
+
+  // Use cart routes
+  app.use('/api/cart', cartRoutes);
+  
+  // Use order routes
+  app.use('/api/orders', orderRoutes);
 
   // ✅ Protected route example
   app.get('/api/profile', authenticateToken, async (req, res) => {

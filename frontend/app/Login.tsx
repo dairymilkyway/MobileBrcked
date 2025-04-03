@@ -131,6 +131,9 @@ export default function LoginScreen() {
           await AsyncStorage.setItem('userToken', data.token);
           await AsyncStorage.setItem('userRole', data.role);
           
+          // Save user email from login form
+          await AsyncStorage.setItem('userEmail', email);
+          
           // Additional user data if available
           if (data.userId) await AsyncStorage.setItem('userId', data.userId);
           if (data.name) await AsyncStorage.setItem('userName', data.name);

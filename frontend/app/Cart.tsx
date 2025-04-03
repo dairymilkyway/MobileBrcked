@@ -1,37 +1,43 @@
-import React, { useState } from 'react';
-import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView, Platform } from 'react-native';
+import React, { useState, useEffect } from 'react';
+import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView, Platform, ActivityIndicator, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserHeader from '@/components/UserHeader';
 import { useNavigation } from '@react-navigation/native';
+import { API_BASE_URL } from '@/env';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
-// Sample cart data - in a real app this would come from state management or API
-const initialCartItems = [
-  {
-    id: '1',
-    name: 'LEGO City Police Station',
-    price: 99.99,
-    quantity: 1,
-    image: 'https://placehold.co/400x400/DA291C/FFD700/png'
-  },
-  {
-    id: '2',
-    name: 'LEGO Star Wars X-Wing',
-    price: 79.99,
-    quantity: 2,
-    image: 'https://placehold.co/400x400/DA291C/FFD700/png'
-  },
-  {
-    id: '3',
-    name: 'LEGO Friends Heartlake City',
-    price: 59.99,
-    quantity: 1,
-    image: 'https://placehold.co/400x400/DA291C/FFD700/png'
-  }
-];
+// Define cart item interface
+interface CartItem {
+  id: number;
+  productId: string;
+  productName: string;
+  price: number;
+  quantity: number;
+  imageURL: string | null;
+  stock?: number; // Optional stock property
+  selected?: boolean; // Added selected property for checkout
+}
+
+// Type for the API response
+interface ApiResponse<T> {
+  success: boolean;
+  data: T;
+  message?: string;
+}
+
+// Interface for stock information
+interface StockInfo {
+  [productId: string]: number;
+}
 
 export default function CartScreen() {
-  const [cartItems, setCartItems] = useState(initialCartItems);
+  const [cartItems, setCartItems] = useState<CartItem[]>([]);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState<string | null>(null);
+  const [stockInfo, setStockInfo] = useState<StockInfo>({});
+  const [stockError, setStockError] = useState<{[key: number]: string}>({});
+  const [selectedAll, setSelectedAll] = useState(false);
   const navigation = useNavigation();
   
   // Hide the default header
@@ -41,68 +47,381 @@ export default function CartScreen() {
     });
   }, [navigation]);
   
-  const updateQuantity = (id: string, change: number) => {
-    const maxQuantity = 10; // Set maximum quantity limit
+  // Fetch cart items when component mounts
+  useEffect(() => {
+    fetchCartItems();
+  }, []);
+  
+  const fetchCartItems = async () => {
+    try {
+      setLoading(true);
+      
+      // Get token from AsyncStorage
+      const token = await AsyncStorage.getItem('token');
+      
+      if (!token) {
+        setError('You need to login to view your cart');
+        setLoading(false);
+        return;
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/cart`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+      
+      if (!response.ok) {
+        throw new Error('Failed to fetch cart items');
+      }
+      
+      const data = await response.json() as ApiResponse<CartItem[]>;
+      
+      if (data.success) {
+        console.log('Cart items received:', JSON.stringify(data.data));
+        
+        // Process and verify cart item quantities
+        const processedItems = data.data.map(item => {
+          // Ensure quantity is a number
+          const numQuantity = Number(item.quantity);
+          if (isNaN(numQuantity)) {
+            console.warn('Invalid quantity found in cart item:', item);
+            item.quantity = 1;
+          } else {
+            item.quantity = numQuantity;
+          }
+          // Initialize all items as unselected by default
+          item.selected = false;
+          return item;
+        });
+        
+        setCartItems(processedItems);
+        setSelectedAll(false);
+        setError(null);
+        
+        // Fetch stock information for all products in cart
+        fetchStockInfo(processedItems.map(item => item.productId));
+      } else {
+        setError(data.message || 'Failed to fetch cart items');
+      }
+    } catch (error) {
+      console.error('Error fetching cart:', error);
+      setError('Error loading cart. Please try again.');
+    } finally {
+      setLoading(false);
+    }
+  };
+  
+  // Fetch stock information for all products in cart
+  const fetchStockInfo = async (productIds: string[]) => {
+    if (!productIds.length) return;
     
+    try {
+      const stockData: StockInfo = {};
+      
+      // Fetch each product's stock information
+      await Promise.all(
+        productIds.map(async (productId: string) => {
+          const response = await fetch(`${API_BASE_URL}/products/${productId}`);
+          if (response.ok) {
+            const data = await response.json();
+            if (data.success && data.data) {
+              stockData[productId] = data.data.stock || 0;
+            }
+          }
+        })
+      );
+      
+      console.log('Stock info fetched:', stockData);
+      setStockInfo(stockData);
+    } catch (error) {
+      console.error('Error fetching stock info:', error);
+    }
+  };
+  
+  const updateQuantity = async (id: number, change: number) => {
+    try {
+      // Clear any previous error for this item
+      setStockError(prev => {
+        const newErrors = {...prev};
+        delete newErrors[id];
+        return newErrors;
+      });
+      
+      const token = await AsyncStorage.getItem('token');
+      
+      if (!token) {
+        Alert.alert('Error', 'You need to login to update your cart');
+        return;
+      }
+      
+      // Find the current item
+      const currentItem = cartItems.find(item => item.id === id);
+      if (!currentItem) return;
+      
+      console.log(`Updating quantity for item ${currentItem.productName} (ID: ${id})`);
+      console.log(`Current quantity: ${currentItem.quantity}, Change: ${change}`);
+      
+      // Check stock if trying to increase quantity
+      if (change > 0) {
+        const availableStock = stockInfo[currentItem.productId];
+        if (availableStock !== undefined) {
+          if (currentItem.quantity + change > availableStock) {
+            // Show error if trying to add more than available stock
+            setStockError(prev => ({
+              ...prev,
+              [id]: `Sorry, only ${availableStock} items available in stock.`
+            }));
+            return;
+          }
+        }
+      }
+      
+      // Calculate new quantity
+      const newQuantity = Math.max(0, currentItem.quantity + change);
+      console.log(`New quantity will be: ${newQuantity}`);
+      
+      // Optimistically update UI
+      setCartItems(prevItems => 
+        prevItems.map(item => {
+          if (item.id === id) {
+            return { ...item, quantity: newQuantity };
+          }
+          return item;
+        }).filter(item => item.quantity > 0) // Remove items with quantity 0
+      );
+      
+      // Send update to server
+      const response = await fetch(`${API_BASE_URL}/cart/update/${id}`, {
+        method: 'PUT',
+        headers: {
+          'Content-Type': 'application/json',
+          'Authorization': `Bearer ${token}`
+        },
+        body: JSON.stringify({ quantity: newQuantity })
+      });
+      
+      const data = await response.json();
+      console.log('Cart update response:', JSON.stringify(data));
+      
+      if (!response.ok) {
+        // If request fails, refresh the cart to get current state
+        fetchCartItems();
+        throw new Error('Failed to update cart');
+      }
+      
+      // If quantity is 0, item will be removed from UI
+      // No need to handle removal separately as filter does it
+    } catch (error) {
+      console.error('Error updating quantity:', error);
+      Alert.alert('Error', 'Failed to update cart. Please try again.');
+    }
+  };
+  
+  const clearCart = async () => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      
+      if (!token) {
+        Alert.alert('Error', 'You need to login to clear your cart');
+        return;
+      }
+      
+      // Confirm with user
+      Alert.alert(
+        'Clear Cart',
+        'Are you sure you want to clear your cart?',
+        [
+          {
+            text: 'Cancel',
+            style: 'cancel'
+          },
+          {
+            text: 'Clear',
+            style: 'destructive',
+            onPress: async () => {
+              try {
+                // Optimistically clear cart in UI
+                setCartItems([]);
+                
+                // Send request to server
+                const response = await fetch(`${API_BASE_URL}/cart/clear`, {
+                  method: 'DELETE',
+                  headers: {
+                    'Authorization': `Bearer ${token}`
+                  }
+                });
+                
+                if (!response.ok) {
+                  // If request fails, refresh the cart
+                  fetchCartItems();
+                  throw new Error('Failed to clear cart');
+                }
+              } catch (error) {
+                console.error('Error clearing cart:', error);
+                Alert.alert('Error', 'Failed to clear cart. Please try again.');
+              }
+            }
+          }
+        ]
+      );
+    } catch (error) {
+      console.error('Error clearing cart:', error);
+      Alert.alert('Error', 'Failed to clear cart. Please try again.');
+    }
+  };
+  
+  // Toggle selection for a single item
+  const toggleItemSelection = (id: number) => {
     setCartItems(prevItems => 
       prevItems.map(item => {
         if (item.id === id) {
-          const newQuantity = Math.max(0, Math.min(maxQuantity, item.quantity + change));
-          return { ...item, quantity: newQuantity };
+          return { ...item, selected: !item.selected };
         }
         return item;
-      }).filter(item => item.quantity > 0) // Remove items with quantity 0
+      })
+    );
+    
+    // Check if all items are now selected or not
+    const updatedItems = cartItems.map(item => item.id === id ? { ...item, selected: !item.selected } : item);
+    const allSelected = updatedItems.every(item => item.selected);
+    setSelectedAll(allSelected);
+  };
+  
+  // Toggle selection for all items
+  const toggleSelectAll = () => {
+    const newSelectedState = !selectedAll;
+    setSelectedAll(newSelectedState);
+    
+    setCartItems(prevItems => 
+      prevItems.map(item => ({
+        ...item, 
+        selected: newSelectedState
+      }))
     );
   };
   
-  const clearCart = () => {
-    setCartItems([]);
-  };
-  
   const getTotal = () => {
-    return cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0).toFixed(2);
+    return cartItems
+      .filter(item => item.selected)
+      .reduce((sum, item) => sum + (item.price * item.quantity), 0)
+      .toFixed(2);
   };
 
-  const renderCartItem = ({ item }: { item: { id: string; name: string; price: number; quantity: number; image: string } }) => (
-    <View style={styles.cartItemContainer}>
-      <View style={styles.studRow}>
-        {[...Array(3)].map((_, i) => (
-          <View key={i} style={styles.stud}>
-            <View style={styles.studInner} />
-          </View>
-        ))}
-      </View>
+  const getSelectedItemsCount = () => {
+    return cartItems.filter(item => item.selected).length;
+  };
+  
+  const proceedToCheckout = async () => {
+    const selectedItems = cartItems.filter(item => item.selected);
+    if (selectedItems.length === 0) {
+      Alert.alert('No Items Selected', 'Please select at least one item to checkout.');
+      return;
+    }
+
+    try {
+      // Save the selected state to AsyncStorage for checkout page to use
+      await AsyncStorage.setItem('selectedCartItems', JSON.stringify(
+        cartItems.map(item => ({
+          id: item.id,
+          selected: item.selected
+        }))
+      ));
       
-      <View style={styles.cartItem}>
-        <Image source={{ uri: item.image }} style={styles.itemImage} />
-        
-        <View style={styles.itemDetails}>
-          <Text style={styles.itemName}>{item.name}</Text>
-          <Text style={styles.itemPrice}>₱{item.price}</Text>
+      // Navigate to checkout
+      navigation.navigate('checkout' as never);
+    } catch (error) {
+      console.error('Error saving selection state:', error);
+      Alert.alert('Error', 'There was a problem preparing your checkout. Please try again.');
+    }
+  };
+
+  const renderCartItem = ({ item }: { item: CartItem }) => {
+    console.log('Rendering cart item:', item.productName, 'quantity:', item.quantity);
+    
+    // Get stock information for this item
+    const stock = stockInfo[item.productId];
+    const hasStockError = stockError[item.id];
+    const isAtStockLimit = stock !== undefined && item.quantity >= stock;
+    
+    return (
+      <View style={styles.cartItemContainer}>
+        <View style={styles.studRow}>
+          {[...Array(3)].map((_, i) => (
+            <View key={i} style={styles.stud}>
+              <View style={styles.studInner} />
+            </View>
+          ))}
         </View>
         
-        <View style={styles.quantityControls}>
+        <View style={styles.cartItem}>
           <TouchableOpacity 
-            style={styles.quantityButton}
-            onPress={() => updateQuantity(item.id, -1)}
+            style={styles.checkboxContainer}
+            onPress={() => toggleItemSelection(item.id)}
           >
-            <MaterialCommunityIcons name="minus" size={18} color="#FFFFFF" />
-            <View style={styles.buttonStud} />
+            <View style={[
+              styles.checkbox,
+              item.selected && styles.checkboxSelected
+            ]}>
+              {item.selected && (
+                <MaterialCommunityIcons 
+                  name="check" 
+                  size={16} 
+                  color="#FFFFFF" 
+                />
+              )}
+            </View>
           </TouchableOpacity>
           
-          <Text style={styles.quantityText}>{item.quantity}</Text>
+          <Image 
+            source={{ uri: item.imageURL || 'https://via.placeholder.com/300' }} 
+            style={styles.itemImage} 
+          />
           
-          <TouchableOpacity 
-            style={[styles.quantityButton, { backgroundColor: '#4CAF50' }]}
-            onPress={() => updateQuantity(item.id, 1)}
-          >
-            <MaterialCommunityIcons name="plus" size={18} color="#FFFFFF" />
-            <View style={styles.buttonStud} />
-          </TouchableOpacity>
+          <View style={styles.itemDetails}>
+            <Text style={styles.itemName}>{item.productName}</Text>
+            <Text style={styles.itemPrice}>₱{item.price.toFixed(2)}</Text>
+          </View>
+          
+          <View style={styles.quantityContainer}>
+            {hasStockError && (
+              <Text style={styles.stockErrorText}>{hasStockError}</Text>
+            )}
+            
+            <View style={styles.quantityControls}>
+              <TouchableOpacity 
+                style={styles.quantityButton}
+                onPress={() => updateQuantity(item.id, -1)}
+              >
+                <MaterialCommunityIcons name="minus" size={18} color="#FFFFFF" />
+                <View style={styles.buttonStud} />
+              </TouchableOpacity>
+              
+              <Text style={styles.quantityText}>{item.quantity}</Text>
+              
+              <TouchableOpacity 
+                style={[
+                  styles.quantityButton, 
+                  { backgroundColor: isAtStockLimit ? '#CCCCCC' : '#4CAF50' }
+                ]}
+                disabled={isAtStockLimit}
+                onPress={() => updateQuantity(item.id, 1)}
+              >
+                <MaterialCommunityIcons name="plus" size={18} color="#FFFFFF" />
+                <View style={styles.buttonStud} />
+              </TouchableOpacity>
+            </View>
+            
+            {stock !== undefined && (
+              <Text style={styles.stockInfoText}>
+                {stock === 0 ? 'Out of stock' : `${stock} in stock`}
+              </Text>
+            )}
+          </View>
         </View>
       </View>
-    </View>
-  );
+    );
+  };
 
   return (
     <SafeAreaView style={styles.container}>
@@ -110,12 +429,48 @@ export default function CartScreen() {
       <UserHeader section="Cart" />
       
       <View style={styles.content}>
-        {cartItems.length > 0 ? (
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#E3000B" />
+            <Text style={styles.loadingText}>Loading your cart...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.errorContainer}>
+            <Text style={styles.errorText}>{error}</Text>
+            <TouchableOpacity 
+              style={styles.retryButton}
+              onPress={fetchCartItems}
+            >
+              <Text style={styles.retryButtonText}>Try Again</Text>
+            </TouchableOpacity>
+          </View>
+        ) : cartItems.length > 0 ? (
           <>
+            <View style={styles.selectAllContainer}>
+              <TouchableOpacity 
+                style={styles.selectAllTouchable}
+                onPress={toggleSelectAll}
+              >
+                <View style={[
+                  styles.checkbox,
+                  selectedAll && styles.checkboxSelected
+                ]}>
+                  {selectedAll && (
+                    <MaterialCommunityIcons 
+                      name="check" 
+                      size={16} 
+                      color="#FFFFFF" 
+                    />
+                  )}
+                </View>
+                <Text style={styles.selectAllText}>Select All</Text>
+              </TouchableOpacity>
+            </View>
+            
             <FlatList
               data={cartItems}
               renderItem={renderCartItem}
-              keyExtractor={item => item.id}
+              keyExtractor={item => String(item.id)}
               contentContainerStyle={styles.cartList}
             />
             
@@ -129,7 +484,12 @@ export default function CartScreen() {
               </View>
               
               <View style={styles.summaryContent}>
-                <Text style={styles.totalLabel}>Total:</Text>
+                <View style={styles.summaryLeftSection}>
+                  <Text style={styles.totalLabel}>Total:</Text>
+                  <Text style={styles.selectedInfo}>
+                    {getSelectedItemsCount()} item(s) selected
+                  </Text>
+                </View>
                 <Text style={styles.totalAmount}>₱{getTotal()}</Text>
               </View>
               
@@ -141,7 +501,7 @@ export default function CartScreen() {
                 
                 <TouchableOpacity 
                   style={styles.checkoutButton} 
-                  onPress={() => navigation.navigate('checkout' as never)}
+                  onPress={proceedToCheckout}
                 >
                   <Text style={styles.checkoutText}>CHECKOUT</Text>
                   <View style={styles.buttonBottom} />
@@ -243,6 +603,9 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#E3000B',
     fontWeight: '700',
+  },
+  quantityContainer: {
+    alignItems: 'center',
   },
   quantityControls: {
     flexDirection: 'row',
@@ -402,5 +765,97 @@ const styles = StyleSheet.create({
     fontSize: 16,
     color: '#666666',
     textAlign: 'center',
-  }
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  loadingText: {
+    marginTop: 10,
+    fontSize: 16,
+    color: '#555'
+  },
+  errorContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20
+  },
+  errorText: {
+    fontSize: 16,
+    color: '#E3000B',
+    textAlign: 'center',
+    marginBottom: 20
+  },
+  retryButton: {
+    backgroundColor: '#E3000B',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 5
+  },
+  retryButtonText: {
+    color: 'white',
+    fontWeight: 'bold'
+  },
+  stockErrorText: {
+    color: '#E3000B',
+    fontSize: 12,
+    marginBottom: 4,
+    textAlign: 'center',
+    maxWidth: 120,
+  },
+  stockInfoText: {
+    fontSize: 12,
+    color: '#4CAF50',
+    marginTop: 4,
+    textAlign: 'center',
+  },
+  checkboxContainer: {
+    marginRight: 12,
+    justifyContent: 'center',
+  },
+  checkbox: {
+    width: 24,
+    height: 24,
+    borderRadius: 4,
+    borderWidth: 2,
+    borderColor: '#000000',
+    backgroundColor: '#FFFFFF',
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  checkboxSelected: {
+    backgroundColor: '#4CAF50',
+  },
+  selectAllContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    paddingVertical: 12,
+    paddingHorizontal: 16,
+    backgroundColor: '#FFFFFF',
+    marginBottom: 16,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#000000',
+  },
+  selectAllTouchable: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  selectAllText: {
+    marginLeft: 12,
+    fontSize: 16,
+    fontWeight: 'bold',
+    color: '#0C0A00',
+  },
+  summaryLeftSection: {
+    flexDirection: 'column',
+  },
+  selectedInfo: {
+    fontSize: 14,
+    color: '#666666',
+    marginTop: 4,
+  },
 });

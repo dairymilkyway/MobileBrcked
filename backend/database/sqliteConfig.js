@@ -4,7 +4,7 @@ const path = require('path');
 // Initialize SQLite database connection
 const sequelize = new Sequelize({
   dialect: 'sqlite',
-  storage: path.join(__dirname, 'tokens.sqlite'),
+  storage: path.join(__dirname, 'database.sqlite'),
   logging: false,
   // Add connection pool configuration for better handling
   pool: {
