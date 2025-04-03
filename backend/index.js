@@ -14,6 +14,7 @@ const jwt = require('jsonwebtoken');
 const path = require('path');
 const fs = require('fs');
 const User = require('./models/User');
+const reviewRoutes = require('./apis/ReviewAPI');
 // Import the product routes
 const productRoutes = require('./apis/ProductAPI');
 const userRoutes = require('./apis/UserAPI');
@@ -151,6 +152,9 @@ initDatabases().then(() => {
 
   // Use user routes
   app.use('/api/users', userRoutes);
+
+  // Use review routes - update this line for consistency
+  app.use('/api/reviews', reviewRoutes);
 
   // ✅ Protected route example
   app.get('/api/profile', authenticateToken, async (req, res) => {

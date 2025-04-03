@@ -16,6 +16,7 @@ import { IconSymbol } from '@/components/ui/IconSymbol';
 import { API_BASE_URL } from '@/env';
 import UserHeader from '@/components/UserHeader';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
+import { AntDesign } from '@expo/vector-icons';
 const FETCH_TIMEOUT = 10000;
 
 interface Product {
@@ -29,6 +30,11 @@ interface Product {
   stock: number; // Added stock property
 }
 
+interface RatingData {
+  averageRating: number;
+  totalReviews: number;
+}
+
 export default function ProductDetail() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
@@ -38,12 +44,16 @@ export default function ProductDetail() {
   const [quantity, setQuantity] = useState(1);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const carouselRef = useRef<FlatList>(null);
+  const [ratings, setRatings] = useState<RatingData>({ averageRating: 0, totalReviews: 0 });
   
   // Sample images for demonstration - in real implementation, these would come from the product data
   const [productImages, setProductImages] = useState<string[]>([]);
   
   useEffect(() => {
     fetchProductDetails();
+    if (id) {
+      fetchProductRatings();
+    }
   }, [id]);
   
   useEffect(() => {
@@ -118,6 +128,36 @@ export default function ProductDetail() {
     }
   };
 
+  const fetchProductRatings = async () => {
+    if (!id) return;
+    
+    try {
+      const apiUrl = `${API_BASE_URL}/reviews/product/${id}/rating`;
+      console.log(`Fetching product ratings from: ${apiUrl}`);
+      
+      const response = await fetchWithTimeout(apiUrl);
+      
+      if (!response.ok) {
+        console.error(`Failed to fetch ratings: ${response.status}`);
+        // Don't throw an error, just return with default values
+        return;
+      }
+      
+      const ratingData = await response.json();
+      if (ratingData.success) {
+        setRatings({
+          averageRating: ratingData.averageRating || 0,
+          totalReviews: ratingData.totalReviews || 0
+        });
+      } else {
+        console.error('API returned failure for ratings:', ratingData.message);
+      }
+    } catch (err) {
+      console.error('Error fetching product ratings:', err);
+      // Don't update state on error to keep default values
+    }
+  };
+
   const handleQuantityChange = (increment: boolean) => {
     setQuantity(prev => {
       if (increment) {
@@ -167,6 +207,30 @@ export default function ProductDetail() {
   const viewabilityConfig = useRef({
     itemVisiblePercentThreshold: 50
   }).current;
+
+  // Render star ratings
+  const renderStars = (rating) => {
+    const stars = [];
+    const roundedRating = Math.round(rating * 2) / 2; // Round to nearest 0.5
+    
+    for (let i = 1; i <= 5; i++) {
+      if (i <= roundedRating) {
+        stars.push(
+          <AntDesign key={i} name="star" size={20} color="#FFD700" />
+        );
+      } else if (i - 0.5 === roundedRating) {
+        stars.push(
+          <AntDesign key={i} name="staro" size={20} color="#FFD700" />
+        );
+      } else {
+        stars.push(
+          <AntDesign key={i} name="staro" size={20} color="#FFD700" />
+        );
+      }
+    }
+    
+    return stars;
+  };
 
   return (
     <View style={styles.container}>
@@ -254,6 +318,22 @@ export default function ProductDetail() {
             <View style={styles.productMetaContainer}>
               <Text style={styles.productCategory}>{product.category}</Text>
               <Text style={styles.productPieces}>{product.pieces} pieces</Text>
+            </View>
+            
+            {/* Rating display */}
+            <View style={styles.ratingContainer}>
+              <View style={styles.starContainer}>
+                {renderStars(ratings.averageRating)}
+              </View>
+              <TouchableOpacity 
+                style={styles.reviewsButton}
+                onPress={() => router.push(`/user/product/reviews?id=${id}`)}
+              >
+                <Text style={styles.reviewsButtonText}>
+                  {ratings.totalReviews > 0 ? `See all ${ratings.totalReviews} reviews` : 'No reviews yet'}
+                </Text>
+                <AntDesign name="right" size={16} color="#006DB7" />
+              </TouchableOpacity>
             </View>
             
             <Text style={styles.productPrice}>₱{product.price.toFixed(2)}</Text>
@@ -660,6 +740,25 @@ const styles = StyleSheet.create({
     color: '#FFFFFF',
     fontWeight: 'bold',
     fontSize: 14,
+    fontFamily: Platform.OS === 'ios' ? 'Futura-Medium' : 'sans-serif-medium',
+  },
+  // Rating styles
+  ratingContainer: {
+    marginTop: 8,
+    marginBottom: 12,
+  },
+  starContainer: {
+    flexDirection: 'row',
+    marginBottom: 4,
+  },
+  reviewsButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  reviewsButtonText: {
+    color: '#006DB7',
+    fontWeight: '500',
+    marginRight: 4,
     fontFamily: Platform.OS === 'ios' ? 'Futura-Medium' : 'sans-serif-medium',
   },
 });

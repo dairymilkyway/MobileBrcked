@@ -139,7 +139,10 @@ export default function CartScreen() {
                   <View style={styles.clearButtonBottom} />
                 </TouchableOpacity>
                 
-                <TouchableOpacity style={styles.checkoutButton}>
+                <TouchableOpacity 
+                  style={styles.checkoutButton} 
+                  onPress={() => navigation.navigate('checkout' as never)}
+                >
                   <Text style={styles.checkoutText}>CHECKOUT</Text>
                   <View style={styles.buttonBottom} />
                 </TouchableOpacity>
