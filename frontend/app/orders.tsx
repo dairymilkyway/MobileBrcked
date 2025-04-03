@@ -42,7 +42,9 @@ interface OrderDetails {
   shipping: number;
   tax: number;
   total: number;
-  status: 'pending' | 'processing' | 'shipped' | 'delivered';
+  status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
+  deliveredAt?: string;
+  cancelledAt?: string;
 }
 
 export default function OrdersScreen() {
@@ -177,6 +179,8 @@ export default function OrdersScreen() {
         return '#9B59B6'; // Purple
       case 'delivered':
         return '#2ECC71'; // Green
+      case 'cancelled':
+        return '#7F8C8D'; // Gray
       default:
         return '#7F8C8D'; // Gray
     }
@@ -228,8 +232,18 @@ export default function OrdersScreen() {
           <View style={styles.orderHeaderLeft}>
             <Text style={styles.orderIdText}>{item.orderId}</Text>
             <Text style={styles.orderDateText}>
-              Order Placed Date: {item.createdAt ? formatDate(item.createdAt) : 'No date available'}
+              Order Placed: {item.createdAt ? formatDate(item.createdAt) : 'No date available'}
             </Text>
+            {item.status === 'delivered' && item.deliveredAt && (
+              <Text style={styles.orderDateText}>
+                Delivered: {formatDate(item.deliveredAt)}
+              </Text>
+            )}
+            {item.status === 'cancelled' && item.cancelledAt && (
+              <Text style={styles.orderDateText}>
+                Cancelled: {formatDate(item.cancelledAt)}
+              </Text>
+            )}
           </View>
           
           <View style={styles.orderHeaderRight}>

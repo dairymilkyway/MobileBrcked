@@ -137,6 +137,128 @@ router.post('/create', authenticateToken, async (req, res) => {
   }
 });
 
+// Get all orders (admin only)
+router.get('/admin', authenticateToken, async (req, res) => {
+  try {
+    // Check if the user is an admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin privileges required.'
+      });
+    }
+    
+    // Get all orders sorted by creation date (newest first)
+    const orders = await Order.find()
+      .sort({ createdAt: -1 });
+    
+    res.json({
+      success: true,
+      data: orders
+    });
+  } catch (error) {
+    console.error('Error fetching all orders:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch orders',
+      error: error.message
+    });
+  }
+});
+
+// Get order details by ID (admin)
+router.get('/admin/:orderId', authenticateToken, async (req, res) => {
+  try {
+    // Check if the user is an admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin privileges required.'
+      });
+    }
+    
+    const { orderId } = req.params;
+    
+    const order = await Order.findOne({ orderId });
+    
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+    
+    res.json({
+      success: true,
+      data: order
+    });
+  } catch (error) {
+    console.error('Error fetching order details:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to fetch order details',
+      error: error.message
+    });
+  }
+});
+
+// Update order status (admin only)
+router.patch('/admin/status/:orderId', authenticateToken, async (req, res) => {
+  try {
+    // Check if the user is an admin
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Access denied. Admin privileges required.'
+      });
+    }
+    
+    const { orderId } = req.params;
+    const { status } = req.body;
+    
+    if (!status || !['pending', 'processing', 'shipped', 'delivered', 'cancelled'].includes(status)) {
+      return res.status(400).json({
+        success: false,
+        message: 'Invalid status value'
+      });
+    }
+    
+    const order = await Order.findOne({ orderId });
+    
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found'
+      });
+    }
+
+    // Update the status
+    order.status = status;
+    
+    // Set delivered or cancelled dates if applicable
+    if (status === 'delivered' && !order.deliveredAt) {
+      order.deliveredAt = new Date();
+    } else if (status === 'cancelled' && !order.cancelledAt) {
+      order.cancelledAt = new Date();
+    }
+    
+    await order.save();
+    
+    res.json({
+      success: true,
+      message: 'Order status updated successfully',
+      data: order
+    });
+  } catch (error) {
+    console.error('Error updating order status:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to update order status',
+      error: error.message
+    });
+  }
+});
+
 // Get user's orders
 router.get('/', authenticateToken, async (req, res) => {
   try {

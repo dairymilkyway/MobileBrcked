@@ -90,8 +90,26 @@ const OrderSchema = new mongoose.Schema({
   },
   status: {
     type: String,
-    enum: ['pending', 'processing', 'shipped', 'delivered'],
+    enum: ['pending', 'processing', 'shipped', 'delivered', 'cancelled'],
     default: 'pending'
+  },
+  deliveredAt: {
+    type: Date,
+    get: function(date) {
+      if (date) {
+        return date.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+      }
+      return null;
+    }
+  },
+  cancelledAt: {
+    type: Date,
+    get: function(date) {
+      if (date) {
+        return date.toISOString().split('T')[0]; // Format as YYYY-MM-DD
+      }
+      return null;
+    }
   },
   createdAt: {
     type: Date,
