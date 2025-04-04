@@ -17,6 +17,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { useRouter } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage'; // ✅ Import AsyncStorage
 import { API_BASE_URL } from '@/env';
+import { registerPushTokenAfterLogin } from '@/utils/notificationHelper';
 
 const { width } = Dimensions.get('window');
 
@@ -137,6 +138,25 @@ export default function LoginScreen() {
           // Additional user data if available
           if (data.userId) await AsyncStorage.setItem('userId', data.userId);
           if (data.name) await AsyncStorage.setItem('userName', data.name);
+          
+          // Register push notification token now that we have a user token
+          try {
+            // Only register push tokens for users, not admins
+            if (data.role === 'user') {
+              console.log('Registering push notification token for user role...');
+              const registered = await registerPushTokenAfterLogin();
+              if (registered) {
+                console.log('Push notification token registered successfully after login');
+              } else {
+                console.warn('Failed to register push notification token after login');
+              }
+            } else {
+              console.log(`User has role '${data.role}', not registering push notifications`);
+            }
+          } catch (notificationError) {
+            console.error('Error registering push notification token:', notificationError);
+            // Continue with login flow even if notification registration fails
+          }
           
           // Verify token was saved
           const savedToken = await AsyncStorage.getItem('token');

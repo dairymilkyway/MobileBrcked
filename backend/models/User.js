@@ -10,6 +10,7 @@ const UserSchema = new mongoose.Schema({
     type: String, 
     default: 'https://minifigs.me/cdn/shop/products/32.png?v=1665143878' 
   },
+  pushToken: { type: String, default: null },
 });
 
 // Hash password before saving

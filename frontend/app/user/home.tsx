@@ -16,6 +16,9 @@ import UserHeader from '@/components/UserHeader';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import ProductCard from '@/components/ProductCard';
 import { API_BASE_URL } from '@/env';
+import { registerPushTokenAfterLogin, forceRegisterPushToken } from '@/utils/notificationHelper';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import Constants from 'expo-constants';
 
 // Request timeout in milliseconds
 const FETCH_TIMEOUT = 10000;
@@ -82,6 +85,30 @@ export default function Home() {
 
   useEffect(() => {
     fetchProducts();
+    
+    // Register push token if not already done
+    const registerPushToken = async () => {
+      try {
+        // Only register for users with role 'user'
+        const userRole = await AsyncStorage.getItem('userRole');
+        if (userRole !== 'user') {
+          console.log(`Home screen: User has role '${userRole}', skipping push token registration`);
+          return;
+        }
+        
+        console.log('Home screen: Registering push notification token for user...');
+        const registered = await registerPushTokenAfterLogin();
+        if (registered) {
+          console.log('Home screen: Push notification token registered successfully');
+        } else {
+          console.warn('Home screen: Failed to register push notification token');
+        }
+      } catch (error) {
+        console.error('Home screen: Error registering push notification token:', error);
+      }
+    };
+    
+    registerPushToken();
   }, []);
 
   // Add a new useEffect to handle combined filters

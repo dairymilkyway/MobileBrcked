@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NotificationBell from './NotificationBell';
 
 export default function UserHeader({ section = 'Home', compact = false }) {
   const router = useRouter();
@@ -28,6 +29,11 @@ export default function UserHeader({ section = 'Home', compact = false }) {
       // Clear the user token and role from AsyncStorage
       await AsyncStorage.removeItem('userToken');
       await AsyncStorage.removeItem('userRole');
+      
+      // Clear notification registration data
+      await AsyncStorage.removeItem('tokenLastRegistered');
+      // We'll keep the actual push token to avoid having to request permissions again
+      // But clear the "last registered" timestamp so it will re-register on next login
       
       // Navigate back to the login screen
       router.replace('/Login');
@@ -107,13 +113,10 @@ export default function UserHeader({ section = 'Home', compact = false }) {
                 <MaterialCommunityIcons name="account" size={22} color="#FFFFFF" />
                 <View style={styles.buttonStud} />
               </TouchableOpacity>
-              <TouchableOpacity 
-                style={[styles.legoButton, { backgroundColor: '#FFC500' }]}
-                onPress={() => alert('Notifications feature coming soon')}
-              >
-                <MaterialCommunityIcons name="bell" size={22} color="#FFFFFF" />
+              <View style={[styles.legoButton, { backgroundColor: '#FFC500' }]}>
+                <NotificationBell />
                 <View style={styles.buttonStud} />
-              </TouchableOpacity>
+              </View>
             </>
           ) : null}
           

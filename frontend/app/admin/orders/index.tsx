@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '@/env';
 import axios from 'axios';
+import * as Notifications from 'expo-notifications';
 
 // Define order type
 interface Order {
@@ -307,67 +308,110 @@ export default function OrdersSection() {
   };
   
   // Update order status
-  const updateOrderStatus = async (orderId: string, status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled') => {
+  const updateOrderStatus = async (orderId: string, newStatus: string) => {
     try {
-      const token = await AsyncStorage.getItem('token');
+      setLoading(true);
+      console.log(`Updating order ${orderId} status to ${newStatus}`);
+
+      const userToken = await AsyncStorage.getItem('userToken');
       
-      if (!token) {
-        Alert.alert('Error', 'You are not authorized to perform this action.');
+      if (!userToken) {
+        Alert.alert('Error', 'You need to be logged in to update orders');
+        setLoading(false);
         return;
       }
-      
-      // Confirm action with user
-      Alert.alert(
-        'Confirm Update',
-        `Are you sure you want to mark this order as ${status}?`,
-        [
-          {
-            text: 'Cancel',
-            style: 'cancel'
-          },
-          {
-            text: 'Yes',
-            onPress: async () => {
-              try {
-                const response = await axios.patch(
-                  `${API_BASE_URL}/orders/admin/status/${orderId}`,
-                  { status },
-                  {
-                    headers: {
-                      Authorization: `Bearer ${token}`
-                    }
-                  }
-                );
-                
-                if (response.data.success) {
-                  // Update the local orders state
-                  setOrders(prevOrders => 
-                    prevOrders.map(order => 
-                      order.orderId === orderId 
-                        ? {
-                            ...order, 
-                            status, 
-                            ...(status === 'delivered' ? {deliveredAt: new Date().toISOString()} : {}),
-                            ...(status === 'cancelled' ? {cancelledAt: new Date().toISOString()} : {})
-                          } 
-                        : order
-                    )
-                  );
-                  Alert.alert('Success', `Order status updated to ${status}.`);
-                } else {
-                  Alert.alert('Error', 'Failed to update order status.');
-                }
-              } catch (error) {
-                console.error('Error updating order status:', error);
-                Alert.alert('Error', 'An error occurred while updating order status.');
+
+      const response = await axios.patch(
+        `${API_BASE_URL}/orders/admin/status/${orderId}`,
+        { status: newStatus },
+        {
+          headers: {
+            'Authorization': `Bearer ${userToken}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (response.data.success) {
+        console.log('Order status updated successfully');
+        console.log('Status changed:', response.data.statusChanged);
+        console.log('Previous status:', response.data.previousStatus);
+        console.log('New status:', response.data.newStatus);
+        
+        // Create a better notification message based on the status change
+        let notificationBody = `Order #${orderId} status changed to: ${newStatus}`;
+        if (response.data.previousStatus && response.data.newStatus) {
+          notificationBody = `Order #${orderId} status changed from ${response.data.previousStatus} to ${response.data.newStatus}`;
+        }
+        
+        // IMPORTANT: Additional attempt to create notification receipt
+        // This bypasses the need for push notifications and directly creates 
+        // a receipt that the client can check for
+        try {
+          console.log('Creating direct notification receipt for order status update');
+          
+          // Attempt to create a receipt
+          const receiptResponse = await axios.post(
+            `${API_BASE_URL}/notifications/receipt`,
+            {
+              orderId,
+              status: newStatus,
+              previousStatus: response.data.previousStatus,
+              message: notificationBody,
+              timestamp: Date.now(),
+              forceShow: true
+            },
+            {
+              headers: {
+                'Authorization': `Bearer ${userToken}`,
+                'Content-Type': 'application/json'
               }
             }
+          );
+          
+          if (receiptResponse.data.success) {
+            console.log('Notification receipt created successfully');
           }
-        ]
-      );
+        } catch (receiptError: any) {
+          // If the receipt endpoint doesn't exist, just log and continue
+          console.log('Notification receipt API not available:', receiptError.message);
+        }
+        
+        // Immediate local notification for testing purposes
+        await Notifications.scheduleNotificationAsync({
+          content: {
+            title: 'Order Status Updated',
+            body: notificationBody,
+            data: { 
+              orderId, 
+              status: newStatus,
+              forceShow: true,  // Special flag to force show notification
+              type: 'orderUpdate',
+              immediate: true,   // Flag to indicate this is an immediate notification
+              previousStatus: response.data.previousStatus,
+              statusChanged: true,
+              timestamp: response.data.timestamp || Date.now()
+            },
+          },
+          trigger: null // Send immediately
+        });
+        
+        console.log('Scheduled immediate local notification for status update');
+        
+        // Remove success Alert dialog - just log the success
+        console.log('Success', notificationBody);
+        
+        // Refresh order list
+        fetchOrders();
+      } else {
+        console.error('Failed to update order status:', response.data.message);
+        Alert.alert('Error', response.data.message || 'Failed to update order status');
+      }
     } catch (error) {
-      console.error('Error in updateOrderStatus:', error);
-      Alert.alert('Error', 'An error occurred while updating order status.');
+      console.error('Error updating order status:', error);
+      Alert.alert('Error', 'An error occurred while updating the order status');
+    } finally {
+      setLoading(false);
     }
   };
   

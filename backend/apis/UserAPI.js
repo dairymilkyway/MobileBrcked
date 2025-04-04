@@ -245,4 +245,47 @@ router.delete('/:id', authenticateToken, async (req, res) => {
     }
 });
 
+// Register push notification token
+router.post('/register-push-token', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { pushToken } = req.body;
+
+    if (!pushToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Push token is required'
+      });
+    }
+
+    // Update the user with the new push token
+    const updatedUser = await User.findByIdAndUpdate(
+      userId,
+      { pushToken },
+      { new: true }
+    ).select('-password');
+
+    if (!updatedUser) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    console.log(`Push token registered for user ${userId}`);
+
+    res.json({
+      success: true,
+      message: 'Push token registered successfully'
+    });
+  } catch (error) {
+    console.error('Error registering push token:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to register push token',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 
