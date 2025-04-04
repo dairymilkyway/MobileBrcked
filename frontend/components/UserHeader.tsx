@@ -4,6 +4,7 @@ import { useRouter } from 'expo-router';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import NotificationBell from './NotificationBell';
 
 export default function UserHeader({ section = 'Home', compact = false }) {
   const router = useRouter();
@@ -54,6 +55,11 @@ export default function UserHeader({ section = 'Home', compact = false }) {
       // Clear the user token and role from AsyncStorage
       await AsyncStorage.removeItem('userToken');
       await AsyncStorage.removeItem('userRole');
+      
+      // Clear notification registration data
+      await AsyncStorage.removeItem('tokenLastRegistered');
+      // We'll keep the actual push token to avoid having to request permissions again
+      // But clear the "last registered" timestamp so it will re-register on next login
       
       // Navigate back to the login screen
       router.replace('/Login');
@@ -160,50 +166,47 @@ export default function UserHeader({ section = 'Home', compact = false }) {
                 <View style={styles.buttonStud} />
               </TouchableOpacity>
               
-              <TouchableOpacity 
-                style={[styles.legoButton, { backgroundColor: '#FFC500' }]}
-                onPress={() => alert('Notifications feature coming soon')}
-              >
-                <MaterialCommunityIcons name="bell" size={22} color="#FFFFFF" />
+              <View style={[styles.legoButton, { backgroundColor: '#FFC500' }]}>
+                <NotificationBell />
                 <View style={styles.buttonStud} />
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.legoButton, { backgroundColor: '#9B59B6' }]}
-                onPress={navigateToOrders}
-              >
-                <MaterialCommunityIcons name="package-variant" size={22} color="#FFFFFF" />
-                <View style={styles.buttonStud} />
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.legoButton, { backgroundColor: '#4CAF50' }]}
-                onPress={() => router.push('/Cart')}
-              >
-                <MaterialCommunityIcons name="cart" size={22} color="#FFFFFF" />
-                <View style={styles.buttonStud} />
-              </TouchableOpacity>
-              
-              <TouchableOpacity 
-                style={[styles.legoButton, { backgroundColor: '#FF3A2F' }]}
-                onPress={() => setShowLogoutModal(true)}
-              >
-                <MaterialCommunityIcons name="logout" size={22} color="#FFFFFF" />
-                <View style={styles.buttonStud} />
-              </TouchableOpacity>
+              </View>
             </>
-          )}
+          ) : null}
           
-          {/* Always show cart button if not expanded for quick access */}
-          {!menuExpanded && (
-            <TouchableOpacity 
-              style={[styles.legoButton, { backgroundColor: '#4CAF50' }]}
-              onPress={() => router.push('/Cart')}
-            >
-              <MaterialCommunityIcons name="cart" size={22} color="#FFFFFF" />
-              <View style={styles.buttonStud} />
-            </TouchableOpacity>
-          )}
+          {/* Orders Button */}
+          <TouchableOpacity 
+            style={[styles.legoButton, { backgroundColor: '#9B59B6' }]}
+            onPress={navigateToOrders}
+          >
+            <MaterialCommunityIcons 
+              name="package-variant" 
+              size={22} 
+              color="#FFFFFF" 
+            />
+            <View style={styles.buttonStud} />
+          </TouchableOpacity>
+          
+          {/* Cart Button */}
+          <TouchableOpacity 
+            style={[styles.legoButton, { backgroundColor: '#4CAF50' }]}
+            onPress={() => router.push('/Cart')}
+          >
+            <MaterialCommunityIcons 
+              name="cart" 
+              size={22} 
+              color="#FFFFFF" 
+            />
+            <View style={styles.buttonStud} />
+          </TouchableOpacity>
+          
+          {/* Logout Button */}
+          <TouchableOpacity 
+            style={[styles.legoButton, { backgroundColor: '#FF3A2F' }]}
+            onPress={() => setShowLogoutModal(true)}
+          >
+            <MaterialCommunityIcons name="logout" size={22} color="#FFFFFF" />
+            <View style={styles.buttonStud} />
+          </TouchableOpacity>
         </View>
       </View>
 
