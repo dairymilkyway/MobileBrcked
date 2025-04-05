@@ -10,7 +10,10 @@ import {
   Alert,
   Modal,
   ScrollView,
-  Dimensions
+  Dimensions,
+  Platform,
+  StatusBar,
+  SafeAreaView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { Link, useRouter } from 'expo-router';
@@ -22,7 +25,47 @@ import { useAppDispatch, useAppSelector } from '../../../redux/hooks';
 import { fetchProducts, removeProduct, setCurrentPage, ProductsState } from '../../../redux/slices/productSlice';
 import { RootState } from '../../../redux/store';
 
-const { width } = Dimensions.get('window');
+const { width, height } = Dimensions.get('window');
+const isSmallScreen = width < 600;
+
+// LEGO brand colors for professional theming
+const LEGO_COLORS = {
+  red: '#E3000B',
+  yellow: '#FFD500',
+  blue: '#006DB7',
+  green: '#00AF4D',
+  black: '#000000',
+  darkGrey: '#333333',
+  lightGrey: '#F2F2F2',
+  white: '#FFFFFF',
+};
+
+// LEGO-inspired shadow for 3D effect
+const LEGO_SHADOW = {
+  shadowColor: LEGO_COLORS.black,
+  shadowOffset: { width: 0, height: 3 },
+  shadowOpacity: 0.25,
+  shadowRadius: 4,
+  elevation: 6,
+};
+
+// LEGO stud design for decorative elements
+const Stud = ({ color = LEGO_COLORS.red, size = 12 }) => (
+  <View style={{
+    width: size,
+    height: size,
+    borderRadius: size/2,
+    backgroundColor: color,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.2)',
+    marginHorizontal: 3,
+  }} />
+);
+
+// Responsive sizing utility
+const getResponsiveSize = (size, factor = 0.05) => {
+  return Math.round(Math.min(width, height) * factor) + size;
+};
 
 const ProductsAdminScreen = () => {
   const dispatch = useAppDispatch();
@@ -105,7 +148,7 @@ const ProductsAdminScreen = () => {
   // Show error message if there was an error
   if (error) {
     return (
-      <View style={styles.container}>
+      <SafeAreaView style={styles.safeArea}>
         <AuthCheck requiredRole="admin" />
         <View style={styles.errorContainer}>
           <Text style={styles.errorText}>Error: {error}</Text>
@@ -116,7 +159,7 @@ const ProductsAdminScreen = () => {
             <Text style={styles.retryButtonText}>Retry</Text>
           </TouchableOpacity>
         </View>
-      </View>
+      </SafeAreaView>
     );
   }
 
@@ -129,14 +172,23 @@ const ProductsAdminScreen = () => {
 
     return (
       <View style={styles.productItem}>
-        <Image 
-          source={{ uri: imageUri }} 
-          style={styles.productImage} 
-        />
+        <View style={styles.productImageContainer}>
+          <Image 
+            source={{ uri: imageUri }} 
+            style={styles.productImage} 
+          />
+        </View>
         <View style={styles.productDetails}>
           <Text style={styles.productName} numberOfLines={2}>{item.name}</Text>
           <Text style={styles.productPrice}>₱{item.price.toFixed(2)}</Text>
-          <Text style={styles.productStock}>Stock: {item.stock}</Text>
+          <View style={styles.stockContainer}>
+            <Text style={styles.productStock}>Stock: {item.stock}</Text>
+            {item.stock < 10 && (
+              <View style={styles.lowStockBadge}>
+                <Text style={styles.lowStockText}>Low Stock</Text>
+              </View>
+            )}
+          </View>
           <TouchableOpacity 
             style={styles.viewDetailsButton}
             onPress={() => handleViewDetails(item)}
@@ -187,7 +239,14 @@ const ProductsAdminScreen = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Text style={styles.modalTitle}>Product Details</Text>
+              <View style={styles.modalHeaderTitle}>
+                <View style={styles.logoStuds}>
+                  {[...Array(3)].map((_, i) => (
+                    <Stud key={i} color={LEGO_COLORS.yellow} size={14} />
+                  ))}
+                </View>
+                <Text style={styles.modalTitle}>Product Details</Text>
+              </View>
               <TouchableOpacity onPress={() => setModalVisible(false)}>
                 <Ionicons name="close" size={24} color="#333" />
               </TouchableOpacity>
@@ -283,127 +342,200 @@ const ProductsAdminScreen = () => {
 
   if (loading && !refreshing) {
     return (
-      <View style={styles.loadingContainer}>
-        <ActivityIndicator size="large" color="#E3000B" />
-        <Text style={styles.loadingText}>Loading products...</Text>
-      </View>
+      <SafeAreaView style={styles.safeArea}>
+        <View style={styles.loadingContainer}>
+          <ActivityIndicator size="large" color={LEGO_COLORS.red} />
+          <Text style={styles.loadingText}>Building product list...</Text>
+        </View>
+      </SafeAreaView>
     );
   }
 
   return (
-    <View style={styles.container}>
-      <AuthCheck requiredRole="admin" />
-      
-      <View style={styles.header}>
-        <Text style={styles.title}>Manage Products</Text>
-        <TouchableOpacity 
-          style={styles.addButton}
-          onPress={() => router.push('/admin/products/create')}
-        >
-          <Ionicons name="add" size={24} color="#fff" />
-          <Text style={styles.addButtonText}>Add Product</Text>
-        </TouchableOpacity>
-      </View>
-
-      <FlatList
-        data={products}
-        renderItem={renderProductItem}
-        keyExtractor={(item) => item._id}
-        contentContainerStyle={styles.list}
-        refreshing={refreshing}
-        onRefresh={handleRefresh}
-        ListEmptyComponent={
-          <View style={styles.emptyContainer}>
-            <Ionicons name="cube-outline" size={60} color="#ccc" />
-            <Text style={styles.emptyText}>No products found</Text>
-            <TouchableOpacity 
-              style={styles.addButton}
-              onPress={() => router.push('/admin/products/create')}
-            >
-              <Text style={styles.addButtonText}>Add your first product</Text>
-            </TouchableOpacity>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor={LEGO_COLORS.red} />
+      <View style={styles.container}>
+        <AuthCheck requiredRole="admin" />
+        
+        <View style={styles.pageHeader}>
+          <View style={styles.logoContainer}>
+            <View style={styles.logoStuds}>
+              {[...Array(4)].map((_, i) => (
+                <Stud key={i} color={LEGO_COLORS.yellow} size={14} />
+              ))}
+            </View>
+            <Text style={styles.pageHeaderTitle}>Manage Products</Text>
           </View>
-        }
-        ListFooterComponent={
-          totalPages > 1 ? (
-            <View style={styles.pagination}>
+          
+          <Text style={styles.pageHeaderSubtitle}>Manage your LEGO product inventory</Text>
+          
+          <TouchableOpacity 
+            style={styles.addButton}
+            onPress={() => router.push('/admin/products/create')}
+          >
+            <Ionicons name="add" size={24} color="#fff" />
+            <Text style={styles.addButtonText}>Add Product</Text>
+          </TouchableOpacity>
+        </View>
+
+        <FlatList
+          data={products}
+          renderItem={renderProductItem}
+          keyExtractor={(item) => item._id}
+          contentContainerStyle={styles.list}
+          refreshing={refreshing}
+          onRefresh={handleRefresh}
+          ListEmptyComponent={
+            <View style={styles.emptyContainer}>
+              <Ionicons name="cube-outline" size={60} color="#ccc" />
+              <Text style={styles.emptyText}>No products found</Text>
               <TouchableOpacity 
-                style={[styles.pageButton, currentPage === 1 && styles.disabledButton]}
-                onPress={() => currentPage > 1 && handlePageChange(currentPage - 1)}
-                disabled={currentPage === 1}
+                style={styles.addEmptyButton}
+                onPress={() => router.push('/admin/products/create')}
               >
-                <Ionicons name="chevron-back" size={20} color={currentPage === 1 ? '#ccc' : '#333'} />
-              </TouchableOpacity>
-              <Text style={styles.pageText}>
-                Page {currentPage} of {totalPages}
-              </Text>
-              <TouchableOpacity 
-                style={[styles.pageButton, currentPage === totalPages && styles.disabledButton]}
-                onPress={() => currentPage < totalPages && handlePageChange(currentPage + 1)}
-                disabled={currentPage === totalPages}
-              >
-                <Ionicons name="chevron-forward" size={20} color={currentPage === totalPages ? '#ccc' : '#333'} />
+                <Text style={styles.addButtonText}>Add your first product</Text>
               </TouchableOpacity>
             </View>
-          ) : null
-        }
-      />
-      
-      {renderDetailsModal()}
-    </View>
+          }
+          ListFooterComponent={
+            totalPages > 1 ? (
+              <View style={styles.pagination}>
+                <TouchableOpacity 
+                  style={[styles.pageButton, currentPage === 1 && styles.disabledButton]}
+                  onPress={() => currentPage > 1 && handlePageChange(currentPage - 1)}
+                  disabled={currentPage === 1}
+                >
+                  <Ionicons name="chevron-back" size={20} color={currentPage === 1 ? '#ccc' : '#333'} />
+                </TouchableOpacity>
+                <Text style={styles.pageText}>
+                  Page {currentPage} of {totalPages}
+                </Text>
+                <TouchableOpacity 
+                  style={[styles.pageButton, currentPage === totalPages && styles.disabledButton]}
+                  onPress={() => currentPage < totalPages && handlePageChange(currentPage + 1)}
+                  disabled={currentPage === totalPages}
+                >
+                  <Ionicons name="chevron-forward" size={20} color={currentPage === totalPages ? '#ccc' : '#333'} />
+                </TouchableOpacity>
+              </View>
+            ) : null
+          }
+        />
+        
+        {renderDetailsModal()}
+        
+        {/* LEGO footer decoration */}
+        <View style={styles.legoFooter}>
+          {[...Array(8)].map((_, i) => (
+            <Stud key={i} color={i % 2 === 0 ? LEGO_COLORS.red : LEGO_COLORS.blue} size={16} />
+          ))}
+        </View>
+      </View>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
+  safeArea: {
+    flex: 1,
+    backgroundColor: LEGO_COLORS.red, // LEGO red for consistent look in notch area
+  },
   container: {
     flex: 1,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: LEGO_COLORS.lightGrey,
     padding: 16,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 16,
+  pageHeader: {
+    flexDirection: 'column',
+    marginBottom: 24,
+    borderBottomWidth: 4,
+    borderBottomColor: LEGO_COLORS.yellow,
+    paddingBottom: 16,
+    marginTop: 30,
   },
-  title: {
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginBottom: 8,
+  },
+  logoStuds: {
+    flexDirection: 'row',
+    marginRight: 10,
+  },
+  pageHeaderTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333',
+    color: LEGO_COLORS.black,
+    ...Platform.select({
+      ios: {
+        fontFamily: 'System',
+      },
+      android: {
+        fontFamily: 'sans-serif-black',
+      }
+    })
+  },
+  pageHeaderSubtitle: {
+    fontSize: 16,
+    color: LEGO_COLORS.darkGrey,
+    marginBottom: 16,
   },
   addButton: {
     flexDirection: 'row',
-    backgroundColor: '#2ecc71',
+    backgroundColor: LEGO_COLORS.green,
     borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 16,
+    paddingVertical: 10,
+    paddingHorizontal: 18,
     alignItems: 'center',
+    justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.black,
+    width: '100%',
+    ...LEGO_SHADOW
   },
   addButtonText: {
-    color: '#fff',
+    color: LEGO_COLORS.white,
     fontWeight: 'bold',
     marginLeft: 4,
+  },
+  addEmptyButton: {
+    flexDirection: 'row',
+    backgroundColor: LEGO_COLORS.green,
+    borderRadius: 8,
+    paddingVertical: 10,
+    paddingHorizontal: 20,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 20,
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.black,
+    ...LEGO_SHADOW
   },
   list: {
     paddingBottom: 16,
   },
   productItem: {
     flexDirection: 'row',
-    backgroundColor: '#fff',
+    backgroundColor: LEGO_COLORS.white,
     borderRadius: 8,
     marginBottom: 12,
     padding: 12,
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.1,
-    shadowRadius: 1,
+    borderWidth: 2,
+    borderColor: LEGO_COLORS.darkGrey,
+    ...LEGO_SHADOW
+  },
+  productImageContainer: {
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: LEGO_COLORS.darkGrey,
+    overflow: 'hidden',
+    width: 90,
+    height: 90,
   },
   productImage: {
-    width: 70,
-    height: 70,
-    borderRadius: 8,
-    backgroundColor: '#f0f0f0',
+    width: 90,
+    height: 90,
+    backgroundColor: LEGO_COLORS.lightGrey,
   },
   productDetails: {
     flex: 1,
@@ -413,20 +545,36 @@ const styles = StyleSheet.create({
   productName: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: LEGO_COLORS.darkGrey,
   },
   productPrice: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#E3000B',
+    color: LEGO_COLORS.red,
+  },
+  stockContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   productStock: {
     fontSize: 14,
-    color: '#666',
+    color: LEGO_COLORS.darkGrey,
+  },
+  lowStockBadge: {
+    backgroundColor: LEGO_COLORS.red,
+    borderRadius: 12,
+    paddingVertical: 2,
+    paddingHorizontal: 6,
+    marginLeft: 8,
+  },
+  lowStockText: {
+    color: LEGO_COLORS.white,
+    fontSize: 10,
+    fontWeight: 'bold',
   },
   viewDetailsButton: {
     marginTop: 5,
-    backgroundColor: '#f0f0f0',
+    backgroundColor: LEGO_COLORS.blue,
     paddingVertical: 4,
     paddingHorizontal: 10,
     borderRadius: 4,
@@ -434,7 +582,7 @@ const styles = StyleSheet.create({
   },
   viewDetailsText: {
     fontSize: 12,
-    color: '#555',
+    color: LEGO_COLORS.white,
     fontWeight: '500',
   },
   actionsContainer: {
@@ -448,22 +596,27 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     marginVertical: 4,
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.black,
+    ...LEGO_SHADOW
   },
   editButton: {
-    backgroundColor: '#3498db',
+    backgroundColor: LEGO_COLORS.blue,
   },
   deleteButton: {
-    backgroundColor: '#e74c3c',
+    backgroundColor: LEGO_COLORS.red,
   },
   loadingContainer: {
     flex: 1,
     justifyContent: 'center',
     alignItems: 'center',
+    backgroundColor: LEGO_COLORS.lightGrey,
   },
   loadingText: {
     marginTop: 12,
-    color: '#666',
+    color: LEGO_COLORS.darkGrey,
     fontSize: 16,
+    fontWeight: '500',
   },
   emptyContainer: {
     alignItems: 'center',
@@ -472,7 +625,7 @@ const styles = StyleSheet.create({
   },
   emptyText: {
     fontSize: 18,
-    color: '#666',
+    color: LEGO_COLORS.darkGrey,
     marginVertical: 16,
   },
   pagination: {
@@ -487,18 +640,21 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     justifyContent: 'center',
     alignItems: 'center',
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
+    backgroundColor: LEGO_COLORS.white,
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.darkGrey,
+    ...LEGO_SHADOW
   },
   disabledButton: {
-    backgroundColor: '#f9f9f9',
-    borderColor: '#eee',
+    backgroundColor: LEGO_COLORS.lightGrey,
+    borderColor: '#ccc',
+    shadowOpacity: 0.1,
   },
   pageText: {
     marginHorizontal: 16,
     fontSize: 14,
-    color: '#666',
+    color: LEGO_COLORS.darkGrey,
+    fontWeight: 'bold',
   },
   // Modal styles
   modalOverlay: {
@@ -510,37 +666,39 @@ const styles = StyleSheet.create({
   modalContent: {
     width: width * 0.92,
     maxHeight: '85%',
-    backgroundColor: '#fff',
+    backgroundColor: LEGO_COLORS.white,
     borderRadius: 16,
     overflow: 'hidden',
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 5 },
-    shadowOpacity: 0.3,
-    shadowRadius: 10,
-    elevation: 10,
+    borderWidth: 3,
+    borderColor: LEGO_COLORS.darkGrey,
+    ...LEGO_SHADOW
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     padding: 18,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    backgroundColor: '#f8f8f8',
+    borderBottomWidth: 3,
+    borderBottomColor: LEGO_COLORS.yellow,
+    backgroundColor: LEGO_COLORS.lightGrey,
+  },
+  modalHeaderTitle: {
+    flexDirection: 'row',
+    alignItems: 'center',
   },
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: LEGO_COLORS.darkGrey,
   },
   modalScrollView: {
     maxHeight: '80%',
   },
   modalFooter: {
     padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#eee',
-    backgroundColor: '#f8f8f8',
+    borderTopWidth: 3,
+    borderTopColor: LEGO_COLORS.lightGrey,
+    backgroundColor: LEGO_COLORS.lightGrey,
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
@@ -553,12 +711,15 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     flex: 1,
     marginHorizontal: 5,
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.black,
+    ...LEGO_SHADOW
   },
   deleteModalButton: {
-    backgroundColor: '#e74c3c',
+    backgroundColor: LEGO_COLORS.red,
   },
   modalButtonText: {
-    color: '#fff',
+    color: LEGO_COLORS.white,
     fontWeight: 'bold',
     marginLeft: 8,
     fontSize: 14,
@@ -568,7 +729,7 @@ const styles = StyleSheet.create({
     position: 'relative',
     width: '100%',
     height: width,
-    backgroundColor: '#000',
+    backgroundColor: LEGO_COLORS.black,
     alignItems: 'center',
     justifyContent: 'center',
   },
@@ -595,9 +756,11 @@ const styles = StyleSheet.create({
     backgroundColor: 'rgba(255, 255, 255, 0.2)',
     justifyContent: 'center',
     alignItems: 'center',
+    borderWidth: 1,
+    borderColor: 'rgba(255, 255, 255, 0.5)',
   },
   galleryCounter: {
-    color: '#fff',
+    color: LEGO_COLORS.white,
     fontWeight: 'bold',
     fontSize: 16,
     backgroundColor: 'rgba(0, 0, 0, 0.4)',
@@ -608,43 +771,43 @@ const styles = StyleSheet.create({
   // Product details styles
   detailsContainer: {
     padding: 20,
-    backgroundColor: '#fff',
+    backgroundColor: LEGO_COLORS.white,
   },
   detailsName: {
     fontSize: 22,
     fontWeight: 'bold',
-    color: '#333',
+    color: LEGO_COLORS.darkGrey,
     marginBottom: 10,
   },
   detailsPrice: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#E3000B',
+    color: LEGO_COLORS.red,
     marginBottom: 20,
   },
   detailsRow: {
     flexDirection: 'row',
     marginBottom: 12,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: LEGO_COLORS.lightGrey,
     padding: 8,
     borderRadius: 8,
   },
   detailsLabel: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#555',
+    color: LEGO_COLORS.darkGrey,
     marginRight: 8,
     marginBottom: 4,
   },
   detailsValue: {
     fontSize: 16,
-    color: '#333',
+    color: LEGO_COLORS.darkGrey,
   },
   detailsDescription: {
     fontSize: 15,
-    color: '#666',
+    color: LEGO_COLORS.darkGrey,
     lineHeight: 24,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: LEGO_COLORS.lightGrey,
     padding: 15,
     borderRadius: 8,
     marginTop: 8,
@@ -654,21 +817,31 @@ const styles = StyleSheet.create({
     justifyContent: 'center',
     alignItems: 'center',
     padding: 32,
+    backgroundColor: LEGO_COLORS.lightGrey,
   },
   errorText: {
     fontSize: 18,
-    color: '#e74c3c',
+    color: LEGO_COLORS.red,
     marginBottom: 16,
+    textAlign: 'center',
   },
   retryButton: {
-    backgroundColor: '#3498db',
+    backgroundColor: LEGO_COLORS.blue,
     padding: 12,
     borderRadius: 8,
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.black,
+    ...LEGO_SHADOW
   },
   retryButtonText: {
-    color: '#fff',
+    color: LEGO_COLORS.white,
     fontWeight: 'bold',
+  },
+  legoFooter: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    paddingVertical: 20,
   },
 });
 
-export default ProductsAdminScreen; 
+export default ProductsAdminScreen;

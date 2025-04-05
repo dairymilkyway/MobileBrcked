@@ -22,6 +22,40 @@ const { width } = Dimensions.get('window');
 const DRAWER_WIDTH = width * 0.7;
 const MINIMUM_GESTURE = 20;
 
+// LEGO brand colors for consistent theming
+const LEGO_COLORS = {
+  red: '#E3000B',
+  yellow: '#FFD500',
+  blue: '#006DB7',
+  green: '#00AF4D',
+  black: '#000000',
+  darkGrey: '#333333',
+  lightGrey: '#F2F2F2',
+  white: '#FFFFFF',
+};
+
+// LEGO-inspired shadow for 3D effect
+const LEGO_SHADOW = {
+  shadowColor: LEGO_COLORS.black,
+  shadowOffset: { width: 0, height: 3 },
+  shadowOpacity: 0.25,
+  shadowRadius: 4,
+  elevation: 6,
+};
+
+// LEGO stud design for decorative elements
+const Stud = ({ color = LEGO_COLORS.red, size = 12 }) => (
+  <View style={{
+    width: size,
+    height: size,
+    borderRadius: size/2,
+    backgroundColor: color,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.2)',
+    marginHorizontal: 3,
+  }} />
+);
+
 interface AdminSidebarProps {
   children: React.ReactNode;
 }
@@ -149,7 +183,7 @@ const AdminSidebar = ({ children }: AdminSidebarProps) => {
 
   return (
     <SafeAreaView style={styles.container}>
-      <StatusBar barStyle="dark-content" />
+      <StatusBar barStyle="light-content" backgroundColor={LEGO_COLORS.red} />
       
       {/* Overlay */}
       {width < 768 && (
@@ -190,7 +224,14 @@ const AdminSidebar = ({ children }: AdminSidebarProps) => {
           ]}
         >
           <View style={styles.drawerHeader}>
-            <Text style={styles.logo}>BRCKED</Text>
+            <View style={styles.logoContainer}>
+              <View style={styles.logoStuds}>
+                {[...Array(3)].map((_, i) => (
+                  <Stud key={i} color={LEGO_COLORS.yellow} size={14} />
+                ))}
+              </View>
+              <Text style={styles.logo}>BRCKED</Text>
+            </View>
             <Text style={styles.logoSub}>Admin</Text>
           </View>
 
@@ -207,7 +248,7 @@ const AdminSidebar = ({ children }: AdminSidebarProps) => {
                 <Ionicons
                   name={item.icon}
                   size={24}
-                  color={isActive(item.route) ? '#ffffff' : '#333333'}
+                  color={isActive(item.route) ? LEGO_COLORS.white : LEGO_COLORS.darkGrey}
                 />
                 <Text
                   style={[
@@ -217,6 +258,12 @@ const AdminSidebar = ({ children }: AdminSidebarProps) => {
                 >
                   {item.title}
                 </Text>
+                {isActive(item.route) && (
+                  <View style={styles.menuStuds}>
+                    <Stud color={LEGO_COLORS.yellow} size={10} />
+                    <Stud color={LEGO_COLORS.yellow} size={10} />
+                  </View>
+                )}
               </TouchableOpacity>
             ))}
           </View>
@@ -229,7 +276,7 @@ const AdminSidebar = ({ children }: AdminSidebarProps) => {
             <Ionicons
               name="log-out-outline"
               size={24}
-              color="#c41818"
+              color={LEGO_COLORS.red}
             />
             <Text style={styles.logoutButtonText}>
               Logout
@@ -248,7 +295,7 @@ const AdminSidebar = ({ children }: AdminSidebarProps) => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContent}>
             <View style={styles.modalHeader}>
-              <Ionicons name="warning-outline" size={50} color="#c41818" />
+              <Ionicons name="warning-outline" size={50} color={LEGO_COLORS.red} />
               <Text style={styles.modalTitle}>Confirm Logout</Text>
             </View>
             
@@ -284,7 +331,7 @@ const AdminSidebar = ({ children }: AdminSidebarProps) => {
           },
         ]}
       >
-        {/* Toggle Button (Mobile only) - Arrow on left center side */}
+        {/* Toggle Button (Mobile only) */}
         {width < 768 && (
           <TouchableOpacity
             style={styles.menuButton}
@@ -294,7 +341,7 @@ const AdminSidebar = ({ children }: AdminSidebarProps) => {
             <Ionicons 
               name={isOpen ? "chevron-back-outline" : "chevron-forward-outline"} 
               size={24} 
-              color="#ffffff" 
+              color={LEGO_COLORS.white} 
             />
           </TouchableOpacity>
         )}
@@ -308,25 +355,18 @@ const AdminSidebar = ({ children }: AdminSidebarProps) => {
 const styles = StyleSheet.create({
   container: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: LEGO_COLORS.red,
   },
   drawer: {
     position: 'absolute',
     left: 0,
     top: 0,
     bottom: 0,
-    backgroundColor: '#ffffff',
-    borderRightWidth: 1,
-    borderRightColor: '#e0e0e0',
+    backgroundColor: LEGO_COLORS.white,
+    borderRightWidth: 2,
+    borderRightColor: LEGO_COLORS.darkGrey,
     zIndex: 2,
-    elevation: 5,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 2,
-      height: 0,
-    },
-    shadowOpacity: 0.2,
-    shadowRadius: 3,
+    ...LEGO_SHADOW,
   },
   overlay: {
     position: 'absolute',
@@ -339,46 +379,92 @@ const styles = StyleSheet.create({
   },
   drawerHeader: {
     padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#e0e0e0',
+    borderBottomWidth: 3,
+    borderBottomColor: LEGO_COLORS.yellow,
+    backgroundColor: LEGO_COLORS.white,
+    ...LEGO_SHADOW
+  },
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  logoStuds: {
+    flexDirection: 'row',
+    marginRight: 10,
   },
   logo: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#c41818',
+    color: LEGO_COLORS.red,
+    ...Platform.select({
+      ios: {
+        fontFamily: 'System',
+      },
+      android: {
+        fontFamily: 'sans-serif-black',
+      }
+    })
   },
   logoSub: {
     fontSize: 14,
-    color: '#666',
+    color: LEGO_COLORS.darkGrey,
+    marginTop: 4,
+    marginLeft: 4,
+    ...Platform.select({
+      ios: {
+        fontFamily: 'System',
+      },
+      android: {
+        fontFamily: 'sans-serif-medium',
+      }
+    })
   },
   drawerContent: {
     flex: 1,
-    paddingTop: 10,
-    paddingHorizontal: 16,
+    paddingTop: 15,
+    paddingHorizontal: 12,
   },
   menuItem: {
     flexDirection: 'row',
     alignItems: 'center',
     paddingVertical: 12,
     borderRadius: 8,
-    marginBottom: 8,
+    marginBottom: 10,
     paddingHorizontal: 16,
+    borderWidth: 1,
+    borderColor: 'transparent',
   },
   activeMenuItem: {
-    backgroundColor: '#c41818',
+    backgroundColor: LEGO_COLORS.red,
+    borderColor: LEGO_COLORS.black,
+    borderWidth: 1.5,
+    ...LEGO_SHADOW
   },
   menuItemText: {
     marginLeft: 16,
     fontSize: 16,
-    color: '#333333',
+    color: LEGO_COLORS.darkGrey,
+    ...Platform.select({
+      ios: {
+        fontFamily: 'System',
+      },
+      android: {
+        fontFamily: 'sans-serif-medium',
+      }
+    })
   },
   activeMenuItemText: {
-    color: '#ffffff',
+    color: LEGO_COLORS.white,
     fontWeight: 'bold',
+  },
+  menuStuds: {
+    flexDirection: 'row',
+    marginLeft: 'auto',
   },
   content: {
     flex: 1,
     zIndex: 0,
+    backgroundColor: LEGO_COLORS.lightGrey,
   },
   menuButton: {
     position: 'absolute',
@@ -390,29 +476,33 @@ const styles = StyleSheet.create({
     paddingRight: 12,
     borderTopRightRadius: 20,
     borderBottomRightRadius: 20,
-    backgroundColor: '#c41818',
+    backgroundColor: LEGO_COLORS.red,
     transform: [{ translateY: -25 }],
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 2,
-      height: 0,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3,
-    elevation: 5,
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.darkGrey,
+    ...LEGO_SHADOW
   },
   logoutButton: {
     flexDirection: 'row',
     alignItems: 'center',
     padding: 16,
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopWidth: 3,
+    borderTopColor: LEGO_COLORS.yellow,
+    backgroundColor: LEGO_COLORS.white,
   },
   logoutButtonText: {
     marginLeft: 16,
     fontSize: 16,
-    color: '#c41818',
+    color: LEGO_COLORS.red,
     fontWeight: 'bold',
+    ...Platform.select({
+      ios: {
+        fontFamily: 'System',
+      },
+      android: {
+        fontFamily: 'sans-serif-medium',
+      }
+    })
   },
   modalOverlay: {
     flex: 1,
@@ -421,20 +511,15 @@ const styles = StyleSheet.create({
     alignItems: 'center',
   },
   modalContent: {
-    backgroundColor: '#fff',
+    backgroundColor: LEGO_COLORS.white,
     borderRadius: 12,
     padding: 24,
     width: '80%',
     maxWidth: 400,
     alignItems: 'center',
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    borderWidth: 2,
+    borderColor: LEGO_COLORS.darkGrey,
+    ...LEGO_SHADOW
   },
   modalHeader: {
     alignItems: 'center',
@@ -443,12 +528,20 @@ const styles = StyleSheet.create({
   modalTitle: {
     fontSize: 20,
     fontWeight: 'bold',
-    color: '#333',
+    color: LEGO_COLORS.black,
     marginTop: 12,
+    ...Platform.select({
+      ios: {
+        fontFamily: 'System',
+      },
+      android: {
+        fontFamily: 'sans-serif-black',
+      }
+    })
   },
   modalText: {
     fontSize: 16,
-    color: '#666',
+    color: LEGO_COLORS.darkGrey,
     textAlign: 'center',
     marginBottom: 24,
   },
@@ -463,24 +556,27 @@ const styles = StyleSheet.create({
     borderRadius: 8,
     minWidth: 120,
     alignItems: 'center',
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.darkGrey,
+    ...LEGO_SHADOW
   },
   cancelButton: {
-    backgroundColor: '#f5f5f5',
+    backgroundColor: LEGO_COLORS.lightGrey,
     marginRight: 8,
   },
   cancelButtonText: {
-    color: '#666',
+    color: LEGO_COLORS.darkGrey,
     fontWeight: 'bold',
   },
   confirmButton: {
-    backgroundColor: '#c41818',
+    backgroundColor: LEGO_COLORS.red,
     marginLeft: 8,
   },
   confirmButtonText: {
-    color: '#fff',
+    color: LEGO_COLORS.white,
     fontWeight: 'bold',
   },
 });
 
 export default AdminSidebar;
-export { AdminSidebar }; 
+export { AdminSidebar };

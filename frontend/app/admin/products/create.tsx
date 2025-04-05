@@ -11,6 +11,9 @@ import {
   Platform,
   KeyboardAvoidingView,
   Image,
+  StatusBar,
+  SafeAreaView,
+  Dimensions
 } from 'react-native';
 import { useRouter } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
@@ -21,6 +24,42 @@ import AuthCheck from '../../../components/AuthCheck';
 import { useAppDispatch, useAppSelector } from '../../../redux/hooks';
 import { addProduct, ProductsState } from '../../../redux/slices/productSlice';
 import { RootState } from '../../../redux/store';
+
+const { width, height } = Dimensions.get('window');
+
+// LEGO brand colors for professional theming
+const LEGO_COLORS = {
+  red: '#E3000B',
+  yellow: '#FFD500',
+  blue: '#006DB7',
+  green: '#00AF4D',
+  black: '#000000',
+  darkGrey: '#333333',
+  lightGrey: '#F2F2F2',
+  white: '#FFFFFF',
+};
+
+// LEGO-inspired shadow for 3D effect
+const LEGO_SHADOW = {
+  shadowColor: LEGO_COLORS.black,
+  shadowOffset: { width: 0, height: 3 },
+  shadowOpacity: 0.25,
+  shadowRadius: 4,
+  elevation: 6,
+};
+
+// LEGO stud design for decorative elements
+const Stud = ({ color = LEGO_COLORS.red, size = 12 }) => (
+  <View style={{
+    width: size,
+    height: size,
+    borderRadius: size/2,
+    backgroundColor: color,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.2)',
+    marginHorizontal: 3,
+  }} />
+);
 
 // Category data for dropdown
 const categoryData = [
@@ -166,22 +205,35 @@ const CreateProductScreen = () => {
   };
 
   return (
-    <ScrollView style={styles.container}>
+    <SafeAreaView style={styles.safeArea}>
+      <StatusBar barStyle="light-content" backgroundColor={LEGO_COLORS.red} />
       <AuthCheck requiredRole="admin" />
       
       <KeyboardAvoidingView 
         behavior={Platform.OS === 'ios' ? 'padding' : 'height'}
-        style={styles.container}
+        style={styles.keyboardContainer}
       >
-        <ScrollView style={styles.scrollView}>
-          <View style={styles.header}>
+        <ScrollView 
+          style={styles.scrollView}
+          showsVerticalScrollIndicator={false}
+          contentContainerStyle={styles.contentInner}
+        >
+          {/* Header with LEGO styling */}
+          <View style={styles.pageHeader}>
             <TouchableOpacity
               style={styles.backButton}
               onPress={() => router.back()}
             >
-              <Ionicons name="arrow-back" size={24} color="#333" />
+              <Ionicons name="arrow-back" size={24} color={LEGO_COLORS.darkGrey} />
             </TouchableOpacity>
-            <Text style={styles.headerTitle}>Create New Product</Text>
+            <View style={styles.titleContainer}>
+              <View style={styles.logoStuds}>
+                {[...Array(3)].map((_, i) => (
+                  <Stud key={i} color={LEGO_COLORS.yellow} size={14} />
+                ))}
+              </View>
+              <Text style={styles.pageHeaderTitle}>Create New Product</Text>
+            </View>
           </View>
 
           <View style={styles.formContainer}>
@@ -224,7 +276,7 @@ const CreateProductScreen = () => {
             <View style={styles.formGroup}>
               <Text style={styles.label}>Category *</Text>
               <Dropdown
-                style={[styles.dropdown, isFocus && { borderColor: '#3498db' }]}
+                style={[styles.dropdown, isFocus && { borderColor: LEGO_COLORS.blue }]}
                 placeholderStyle={styles.placeholderStyle}
                 selectedTextStyle={styles.selectedTextStyle}
                 iconStyle={styles.iconStyle}
@@ -236,7 +288,7 @@ const CreateProductScreen = () => {
                 value={formData.category}
                 onFocus={() => setIsFocus(true)}
                 onBlur={() => setIsFocus(false)}
-                onChange={handleCategoryChange} 
+                onChange={handleCategoryChange}
               />
             </View>
 
@@ -267,103 +319,149 @@ const CreateProductScreen = () => {
             </View>
 
             <View style={styles.formGroup}>
-              <Text style={styles.label}>Product Images (Max: 5)</Text>
+              <View style={styles.sectionHeaderBar}>
+                <Text style={styles.sectionTitle}>Product Images (Max: 5)</Text>
+                <View style={styles.headerStuds}>
+                  <Stud color={LEGO_COLORS.blue} />
+                  <Stud color={LEGO_COLORS.green} />
+                </View>
+              </View>
               <Text style={styles.imageNote}>Images will be uploaded to Cloudinary for secure storage and fast delivery</Text>
               
-              <View style={styles.uploadButtonsContainer}>
-                <TouchableOpacity 
-                  style={styles.uploadButton}
-                  onPress={handlePickImages}
-                >
-                  <Ionicons name="image-outline" size={24} color="#fff" />
-                  <Text style={styles.uploadButtonText}>Choose Images</Text>
-                </TouchableOpacity>
-                
-                <TouchableOpacity 
-                  style={styles.uploadButton}
-                  onPress={handleTakePicture}
-                >
-                  <Ionicons name="camera-outline" size={24} color="#fff" />
-                  <Text style={styles.uploadButtonText}>Take Photo</Text>
-                </TouchableOpacity>
-              </View>
-              
-              {/* Show selected images */}
-              {formData.images && formData.images.length > 0 && (
-                <View style={styles.selectedImagesContainer}>
-                  <Text style={styles.selectedImagesText}>
-                    {formData.images.length} {formData.images.length === 1 ? 'image' : 'images'} selected
-                  </Text>
-                  <ScrollView horizontal>
-                    {formData.images.map((image, index) => (
-                      <View key={index} style={styles.imageContainer}>
-                        <Image 
-                          source={{ uri: image.uri }} 
-                          style={styles.previewImage} 
-                        />
-                        <TouchableOpacity
-                          style={styles.removeImageButton}
-                          onPress={() => removeImage(index)}
-                        >
-                          <Ionicons name="close-circle" size={24} color="#e74c3c" />
-                        </TouchableOpacity>
-                      </View>
-                    ))}
-                  </ScrollView>
+              <View style={styles.newImagesSection}>
+                <View style={styles.uploadButtonsContainer}>
+                  <TouchableOpacity 
+                    style={[styles.uploadButton, { backgroundColor: LEGO_COLORS.blue }]}
+                    onPress={handlePickImages}
+                  >
+                    <Ionicons name="image-outline" size={24} color={LEGO_COLORS.white} />
+                    <Text style={styles.uploadButtonText}>Choose Images</Text>
+                  </TouchableOpacity>
+                  
+                  <TouchableOpacity 
+                    style={[styles.uploadButton, { backgroundColor: LEGO_COLORS.green }]}
+                    onPress={handleTakePicture}
+                  >
+                    <Ionicons name="camera-outline" size={24} color={LEGO_COLORS.white} />
+                    <Text style={styles.uploadButtonText}>Take Photo</Text>
+                  </TouchableOpacity>
                 </View>
-              )}
+                
+                {/* Show selected images */}
+                {formData.images && formData.images.length > 0 && (
+                  <View style={styles.selectedImagesContainer}>
+                    <Text style={styles.selectedImagesText}>
+                      {formData.images.length} {formData.images.length === 1 ? 'image' : 'images'} selected
+                    </Text>
+                    <ScrollView horizontal showsHorizontalScrollIndicator={false}>
+                      {formData.images.map((image, index) => (
+                        <View key={index} style={styles.imageContainer}>
+                          <Image 
+                            source={{ uri: image.uri }} 
+                            style={styles.previewImage} 
+                          />
+                          <TouchableOpacity
+                            style={styles.removeImageButton}
+                            onPress={() => removeImage(index)}
+                          >
+                            <Ionicons name="close-circle" size={24} color={LEGO_COLORS.red} />
+                          </TouchableOpacity>
+                        </View>
+                      ))}
+                    </ScrollView>
+                  </View>
+                )}
+              </View>
             </View>
 
             <TouchableOpacity
-              style={styles.submitButton}
+              style={[styles.submitButton, loading && styles.disabledButton]}
               onPress={handleSubmit}
               disabled={loading}
             >
               {loading ? (
-                <ActivityIndicator size="small" color="#fff" />
+                <ActivityIndicator size="small" color={LEGO_COLORS.white} />
               ) : (
                 <>
-                  <Ionicons name="save-outline" size={20} color="#fff" />
+                  <Ionicons name="save-outline" size={20} color={LEGO_COLORS.white} />
                   <Text style={styles.submitButtonText}>Create Product</Text>
                 </>
               )}
             </TouchableOpacity>
           </View>
+          
+          {/* LEGO footer decoration */}
+          <View style={styles.legoFooter}>
+            {[...Array(8)].map((_, i) => (
+              <Stud key={i} color={i % 2 === 0 ? LEGO_COLORS.red : LEGO_COLORS.blue} size={16} />
+            ))}
+          </View>
         </ScrollView>
       </KeyboardAvoidingView>
-    </ScrollView>
+    </SafeAreaView>
   );
 };
 
 const styles = StyleSheet.create({
-  container: {
+  safeArea: {
     flex: 1,
-    backgroundColor: '#f9f9f9',
+    backgroundColor: LEGO_COLORS.red,
+  },
+  keyboardContainer: {
+    flex: 1,
+    backgroundColor: LEGO_COLORS.lightGrey,
   },
   scrollView: {
     flex: 1,
   },
-  header: {
+  contentInner: {
+    padding: 16,
+    paddingBottom: 40,
+  },
+  pageHeader: {
     flexDirection: 'row',
     alignItems: 'center',
-    padding: 16,
-    borderBottomWidth: 1,
-    borderBottomColor: '#eee',
-    backgroundColor: '#fff',
+    marginBottom: 24,
+    paddingVertical: 12,
+    borderBottomWidth: 4,
+    borderBottomColor: LEGO_COLORS.yellow,
+    marginTop: 20,
   },
   backButton: {
-    marginRight: 16,
+    padding: 8,
+    marginRight: 10,
   },
-  headerTitle: {
-    fontSize: 18,
+  titleContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  logoStuds: {
+    flexDirection: 'row',
+    marginRight: 10,
+  },
+  pageHeaderTitle: {
+    fontSize: 22,
     fontWeight: 'bold',
-    color: '#333',
+    color: LEGO_COLORS.black,
+    ...Platform.select({
+      ios: {
+        fontFamily: 'System',
+      },
+      android: {
+        fontFamily: 'sans-serif-black',
+      }
+    })
   },
   formContainer: {
+    backgroundColor: LEGO_COLORS.white,
+    borderRadius: 8,
     padding: 16,
+    borderWidth: 2,
+    borderColor: LEGO_COLORS.darkGrey,
+    ...LEGO_SHADOW
   },
   formGroup: {
-    marginBottom: 16,
+    marginBottom: 18,
   },
   formRow: {
     flexDirection: 'row',
@@ -373,27 +471,27 @@ const styles = StyleSheet.create({
     fontSize: 14,
     fontWeight: 'bold',
     marginBottom: 8,
-    color: '#555',
+    color: LEGO_COLORS.darkGrey,
   },
   input: {
-    backgroundColor: '#fff',
-    borderWidth: 1,
-    borderColor: '#ddd',
+    backgroundColor: LEGO_COLORS.white,
+    borderWidth: 2,
+    borderColor: LEGO_COLORS.darkGrey,
     borderRadius: 8,
-    padding: 10,
+    padding: 12,
     fontSize: 16,
-    color: '#333',
+    color: LEGO_COLORS.darkGrey,
   },
   textArea: {
     minHeight: 100,
   },
   dropdown: {
     height: 50,
-    borderColor: '#ddd',
-    borderWidth: 1,
+    borderColor: LEGO_COLORS.darkGrey,
+    borderWidth: 2,
     borderRadius: 8,
-    paddingHorizontal: 10,
-    backgroundColor: '#fff',
+    paddingHorizontal: 12,
+    backgroundColor: LEGO_COLORS.white,
   },
   placeholderStyle: {
     fontSize: 16,
@@ -401,146 +499,129 @@ const styles = StyleSheet.create({
   },
   selectedTextStyle: {
     fontSize: 16,
-    color: '#333',
+    color: LEGO_COLORS.darkGrey,
   },
   iconStyle: {
     width: 20,
     height: 20,
   },
-  dropdownIcon: {
-    marginRight: 10,
-  },
-  imagesContainer: {
+  sectionHeaderBar: {
     flexDirection: 'row',
-    flexWrap: 'wrap',
-  },
-  imagePreview: {
-    width: 100,
-    height: 100,
-    margin: 5,
-    position: 'relative',
-  },
-  imageThumb: {
-    width: '100%',
-    height: '100%',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
-  },
-  removeImageBtn: {
-    position: 'absolute',
-    top: -10,
-    right: -10,
-    backgroundColor: '#fff',
-    borderRadius: 12,
-  },
-  imageActions: {
-    width: 100,
-    height: 100,
-    margin: 5,
-    justifyContent: 'center',
+    justifyContent: 'space-between',
     alignItems: 'center',
+    borderBottomWidth: 3,
+    borderBottomColor: LEGO_COLORS.yellow,
+    paddingBottom: 10,
+    marginBottom: 15,
   },
-  imageBtn: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'center',
-    backgroundColor: '#3498db',
-    borderRadius: 8,
-    paddingVertical: 8,
-    paddingHorizontal: 12,
-    marginVertical: 4,
-    width: '100%',
-  },
-  galleryBtn: {
-    backgroundColor: '#3498db',
-  },
-  cameraBtn: {
-    backgroundColor: '#2ecc71',
-  },
-  imageBtnText: {
-    color: '#fff',
+  sectionTitle: {
+    fontSize: 18,
     fontWeight: 'bold',
-    marginLeft: 4,
-    fontSize: 12,
+    color: LEGO_COLORS.black,
   },
-  imagesHelpText: {
-    fontSize: 12,
-    color: '#777',
-    marginTop: 8,
-  },
-  submitButton: {
-    backgroundColor: '#E3000B',
-    borderRadius: 8,
-    padding: 15,
-    alignItems: 'center',
-    justifyContent: 'center',
-    marginTop: 24,
+  headerStuds: {
     flexDirection: 'row',
-  },
-  submitButtonText: {
-    color: '#fff',
-    fontWeight: 'bold',
-    fontSize: 16,
-    marginLeft: 8,
   },
   imageNote: {
     fontSize: 12,
-    color: '#666',
-    marginBottom: 10,
+    color: LEGO_COLORS.darkGrey,
+    marginBottom: 16,
     fontStyle: 'italic',
+  },
+  newImagesSection: {
+    marginTop: 16,
+    backgroundColor: LEGO_COLORS.lightGrey,
+    borderRadius: 8,
+    padding: 12,
   },
   uploadButtonsContainer: {
     flexDirection: 'row',
     justifyContent: 'space-between',
+    marginTop: 10,
+    marginBottom: 12,
   },
   uploadButton: {
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
-    backgroundColor: '#3498db',
     borderRadius: 8,
-    paddingVertical: 8,
+    paddingVertical: 10,
     paddingHorizontal: 12,
-    marginVertical: 4,
     width: '48%',
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.black,
+    ...LEGO_SHADOW
   },
   uploadButtonText: {
-    color: '#fff',
+    color: LEGO_COLORS.white,
     fontWeight: 'bold',
-    marginLeft: 4,
-    fontSize: 12,
+    marginLeft: 8,
+    fontSize: 14,
   },
   selectedImagesContainer: {
-    marginTop: 10,
-    marginBottom: 10,
+    marginTop: 16,
   },
   selectedImagesText: {
     fontSize: 14,
     fontWeight: 'bold',
-    marginBottom: 8,
-    color: '#555',
+    marginBottom: 12,
+    color: LEGO_COLORS.darkGrey,
   },
   imageContainer: {
     width: 100,
     height: 100,
     margin: 5,
     position: 'relative',
+    borderWidth: 2,
+    borderColor: LEGO_COLORS.darkGrey,
+    borderRadius: 8,
+    overflow: 'hidden',
   },
   previewImage: {
     width: '100%',
     height: '100%',
-    borderRadius: 8,
-    borderWidth: 1,
-    borderColor: '#ddd',
   },
   removeImageButton: {
     position: 'absolute',
-    top: -10,
-    right: -10,
-    backgroundColor: '#fff',
+    top: 5,
+    right: 5,
+    backgroundColor: LEGO_COLORS.white,
     borderRadius: 12,
+    zIndex: 10,
+    padding: 2,
+    elevation: 5,
+    shadowColor: '#000',
+    shadowOffset: { width: 0, height: 1 },
+    shadowOpacity: 0.3,
+    shadowRadius: 1,
+  },
+  submitButton: {
+    backgroundColor: LEGO_COLORS.green,
+    borderRadius: 8,
+    padding: 16,
+    alignItems: 'center',
+    justifyContent: 'center',
+    marginTop: 24,
+    flexDirection: 'row',
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.black,
+    ...LEGO_SHADOW
+  },
+  submitButtonText: {
+    color: LEGO_COLORS.white,
+    fontWeight: 'bold',
+    fontSize: 16,
+    marginLeft: 8,
+  },
+  disabledButton: {
+    opacity: 0.7,
+  },
+  legoFooter: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    paddingVertical: 20,
+    marginTop: 20,
   },
 });
 
-export default CreateProductScreen; 
+export default CreateProductScreen;

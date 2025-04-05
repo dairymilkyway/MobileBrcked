@@ -1,9 +1,47 @@
 import React, { useState, useEffect } from 'react';
-import { View, Text, StyleSheet, Platform, FlatList, TouchableOpacity, SafeAreaView, StatusBar, Alert, Modal, Image } from 'react-native';
+import { View, Text, StyleSheet, Platform, FlatList, TouchableOpacity, SafeAreaView, StatusBar, Alert, Modal, Image, Dimensions } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { fetchAdminOrders, updateOrderStatus, Order, resetOrderState, setSelectedOrder } from '@/redux/slices/orderSlices';
+
+// Get screen dimensions for responsive sizing
+const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
+const isSmallScreen = screenWidth < 600;
+
+// LEGO brand colors for professional theming (matching dashboard)
+const LEGO_COLORS = {
+  red: '#E3000B',
+  yellow: '#FFD500',
+  blue: '#006DB7',
+  green: '#00AF4D',
+  black: '#000000',
+  darkGrey: '#333333',
+  lightGrey: '#F2F2F2',
+  white: '#FFFFFF',
+};
+
+// LEGO-inspired shadow for 3D effect
+const LEGO_SHADOW = {
+  shadowColor: LEGO_COLORS.black,
+  shadowOffset: { width: 0, height: 3 },
+  shadowOpacity: 0.25,
+  shadowRadius: 4,
+  elevation: 6,
+};
+
+// LEGO stud design for decorative elements
+const Stud = ({ color = LEGO_COLORS.red, size = 12 }) => (
+  <View style={{
+    width: size,
+    height: size,
+    borderRadius: size/2,
+    backgroundColor: color,
+    borderWidth: 1,
+    borderColor: 'rgba(0,0,0,0.2)',
+    marginHorizontal: 3,
+  }} />
+);
 
 // Order detail modal component
 const OrderDetailModal = ({ order, visible, onClose }: { order: Order | null, visible: boolean, onClose: () => void }) => {
@@ -21,99 +59,108 @@ const OrderDetailModal = ({ order, visible, onClose }: { order: Order | null, vi
           <View style={styles.modalHeader}>
             <Text style={styles.modalTitle}>Order Details - {order.orderId}</Text>
             <TouchableOpacity onPress={onClose}>
-              <Ionicons name="close" size={24} color="#333" />
+              <Ionicons name="close" size={24} color={LEGO_COLORS.darkGrey} />
             </TouchableOpacity>
           </View>
           
-          <View style={styles.modalSection}>
-            <Text style={styles.sectionTitle}>Customer Information</Text>
-            <View style={styles.customerInfoContainer}>
-              <View style={styles.customerInfoItem}>
-                <Ionicons name="person" size={18} color="#666" />
-                <Text style={styles.detailText}>{order.shippingDetails.name}</Text>
-              </View>
-              <View style={styles.customerInfoItem}>
-                <Ionicons name="mail" size={18} color="#666" />
-                <Text style={styles.detailText}>{order.shippingDetails.email}</Text>
-              </View>
-              <View style={styles.customerInfoItem}>
-                <Ionicons name="call" size={18} color="#666" />
-                <Text style={styles.detailText}>{order.shippingDetails.phone}</Text>
-              </View>
-              <View style={styles.customerInfoItem}>
-                <Ionicons name="location" size={18} color="#666" />
-                <Text style={styles.detailText}>
-                  {order.shippingDetails.address}, {order.shippingDetails.city}, {order.shippingDetails.postalCode}
-                </Text>
-              </View>
-            </View>
-          </View>
-          
-          <View style={styles.modalSection}>
-            <Text style={styles.sectionTitle}>Order Items</Text>
-            {order.items.map((item, index) => (
-              <View key={`item-${index}`} style={styles.orderItemCard}>
-                {item.imageURL ? (
-                  <Image 
-                    source={{ uri: item.imageURL }} 
-                    style={styles.productImage}
-                    resizeMode="cover"
-                  />
-                ) : (
-                  <View style={styles.noImageContainer}>
-                    <Ionicons name="image-outline" size={24} color="#ccc" />
-                  </View>
-                )}
-                <View style={styles.itemDetails}>
-                  <Text style={styles.itemName}>{item.productName}</Text>
-                  <View style={styles.itemRow}>
-                    <Text style={styles.itemLabel}>Quantity:</Text>
-                    <Text style={styles.itemValue}>{item.quantity}</Text>
-                  </View>
-                  <View style={styles.itemRow}>
-                    <Text style={styles.itemLabel}>Price:</Text>
-                    <Text style={styles.itemValue}>₱{item.price.toFixed(2)}</Text>
-                  </View>
-                  <View style={styles.itemRow}>
-                    <Text style={styles.itemLabel}>Total:</Text>
-                    <Text style={styles.itemValue}>₱{(item.quantity * item.price).toFixed(2)}</Text>
+          <FlatList
+            data={[1]} // Just need one item to render the content
+            keyExtractor={() => 'modal-content'}
+            renderItem={() => (
+              <>
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionTitle}>Customer Information</Text>
+                  <View style={styles.customerInfoContainer}>
+                    <View style={styles.customerInfoItem}>
+                      <Ionicons name="person" size={18} color="#666" />
+                      <Text style={styles.detailText}>{order.shippingDetails.name}</Text>
+                    </View>
+                    <View style={styles.customerInfoItem}>
+                      <Ionicons name="mail" size={18} color="#666" />
+                      <Text style={styles.detailText}>{order.shippingDetails.email}</Text>
+                    </View>
+                    <View style={styles.customerInfoItem}>
+                      <Ionicons name="call" size={18} color="#666" />
+                      <Text style={styles.detailText}>{order.shippingDetails.phone}</Text>
+                    </View>
+                    <View style={styles.customerInfoItem}>
+                      <Ionicons name="location" size={18} color="#666" />
+                      <Text style={styles.detailText}>
+                        {order.shippingDetails.address}, {order.shippingDetails.city}, {order.shippingDetails.postalCode}
+                      </Text>
+                    </View>
                   </View>
                 </View>
-              </View>
-            ))}
-          </View>
-          
-          <View style={styles.modalSection}>
-            <Text style={styles.sectionTitle}>Payment Summary</Text>
-            <View style={styles.paymentMethodContainer}>
-              <Ionicons 
-                name={order.paymentMethod === 'cod' ? 'cash' : order.paymentMethod === 'gcash' ? 'phone-portrait' : 'card'} 
-                size={22} 
-                color="#666" 
-              />
-              <Text style={styles.paymentMethodText}>
-                {order.paymentMethod === 'cod' ? 'Cash on Delivery' : order.paymentMethod === 'gcash' ? 'GCash' : 'Credit Card'}
-              </Text>
-            </View>
-            <View style={styles.paymentDetails}>
-              <View style={styles.paymentRow}>
-                <Text style={styles.paymentLabel}>Subtotal:</Text>
-                <Text style={styles.paymentValue}>₱{order.subtotal.toFixed(2)}</Text>
-              </View>
-              <View style={styles.paymentRow}>
-                <Text style={styles.paymentLabel}>Shipping:</Text>
-                <Text style={styles.paymentValue}>₱{order.shipping.toFixed(2)}</Text>
-              </View>
-              <View style={styles.paymentRow}>
-                <Text style={styles.paymentLabel}>Tax:</Text>
-                <Text style={styles.paymentValue}>₱{order.tax.toFixed(2)}</Text>
-              </View>
-              <View style={[styles.paymentRow, styles.totalRow]}>
-                <Text style={styles.totalLabel}>Total:</Text>
-                <Text style={styles.totalValue}>₱{order.total.toFixed(2)}</Text>
-              </View>
-            </View>
-          </View>
+                
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionTitle}>Order Items</Text>
+                  {order.items.map((item, index) => (
+                    <View key={`item-${index}`} style={styles.orderItemCard}>
+                      {item.imageURL ? (
+                        <Image 
+                          source={{ uri: item.imageURL }} 
+                          style={styles.productImage}
+                          resizeMode="cover"
+                        />
+                      ) : (
+                        <View style={styles.noImageContainer}>
+                          <Ionicons name="image-outline" size={24} color="#ccc" />
+                        </View>
+                      )}
+                      <View style={styles.itemDetails}>
+                        <Text style={styles.itemName}>{item.productName}</Text>
+                        <View style={styles.itemRow}>
+                          <Text style={styles.itemLabel}>Quantity:</Text>
+                          <Text style={styles.itemValue}>{item.quantity}</Text>
+                        </View>
+                        <View style={styles.itemRow}>
+                          <Text style={styles.itemLabel}>Price:</Text>
+                          <Text style={styles.itemValue}>₱{item.price.toFixed(2)}</Text>
+                        </View>
+                        <View style={styles.itemRow}>
+                          <Text style={styles.itemLabel}>Total:</Text>
+                          <Text style={styles.itemValue}>₱{(item.quantity * item.price).toFixed(2)}</Text>
+                        </View>
+                      </View>
+                    </View>
+                  ))}
+                </View>
+                
+                <View style={styles.modalSection}>
+                  <Text style={styles.sectionTitle}>Payment Summary</Text>
+                  <View style={styles.paymentMethodContainer}>
+                    <Ionicons 
+                      name={order.paymentMethod === 'cod' ? 'cash' : order.paymentMethod === 'gcash' ? 'phone-portrait' : 'card'} 
+                      size={22} 
+                      color="#666" 
+                    />
+                    <Text style={styles.paymentMethodText}>
+                      {order.paymentMethod === 'cod' ? 'Cash on Delivery' : order.paymentMethod === 'gcash' ? 'GCash' : 'Credit Card'}
+                    </Text>
+                  </View>
+                  <View style={styles.paymentDetails}>
+                    <View style={styles.paymentRow}>
+                      <Text style={styles.paymentLabel}>Subtotal:</Text>
+                      <Text style={styles.paymentValue}>₱{order.subtotal.toFixed(2)}</Text>
+                    </View>
+                    <View style={styles.paymentRow}>
+                      <Text style={styles.paymentLabel}>Shipping:</Text>
+                      <Text style={styles.paymentValue}>₱{order.shipping.toFixed(2)}</Text>
+                    </View>
+                    <View style={styles.paymentRow}>
+                      <Text style={styles.paymentLabel}>Tax:</Text>
+                      <Text style={styles.paymentValue}>₱{order.tax.toFixed(2)}</Text>
+                    </View>
+                    <View style={[styles.paymentRow, styles.totalRow]}>
+                      <Text style={styles.totalLabel}>Total:</Text>
+                      <Text style={styles.totalValue}>₱{order.total.toFixed(2)}</Text>
+                    </View>
+                  </View>
+                </View>
+              </>
+            )}
+            showsVerticalScrollIndicator={true}
+          />
         </View>
       </View>
     </Modal>
@@ -135,21 +182,32 @@ const OrderItem = ({
   // Get status color
   const getStatusColor = (status: string): string => {
     switch(status) {
-      case 'delivered': return '#4CAF50'; // Green
-      case 'shipped': return '#FF9800'; // Orange
-      case 'processing': return '#2196F3'; // Blue
-      case 'cancelled': return '#F44336'; // Red
+      case 'delivered': return LEGO_COLORS.green;
+      case 'shipped': return LEGO_COLORS.yellow;
+      case 'processing': return LEGO_COLORS.blue;
+      case 'cancelled': return LEGO_COLORS.red;
       default: return '#9E9E9E'; // Gray
     }
   };
 
   return (
     <View style={styles.orderItem}>
+      {/* Decorative studs */}
+      <View style={styles.orderStuds}>
+        <Stud color={LEGO_COLORS.blue} />
+        <Stud color={LEGO_COLORS.red} />
+      </View>
+      
       <View style={styles.orderHeader}>
-        <Text style={styles.orderId}>{order.orderId}</Text>
-        <View style={[styles.statusChip, { backgroundColor: getStatusColor(order.status) }]}>
-          <Text style={styles.statusText}>{order.status}</Text>
+        {/* Status moved above order ID */}
+        <View style={styles.statusContainer}>
+          <View style={[styles.statusChip, { backgroundColor: getStatusColor(order.status) }]}>
+            <Text style={[styles.statusText, 
+              order.status === 'shipped' ? {color: LEGO_COLORS.black} : {color: LEGO_COLORS.white}
+            ]}>{order.status}</Text>
+          </View>
         </View>
+        <Text style={styles.orderId}>{order.orderId}</Text>
       </View>
       
       <View style={styles.orderDetails}>
@@ -175,14 +233,14 @@ const OrderItem = ({
           style={styles.detailsButton} 
           onPress={() => onViewDetails(order)}
         >
-          <Ionicons name="eye-outline" size={16} color="#333" style={styles.buttonIcon} />
+          <Ionicons name="eye-outline" size={16} color={LEGO_COLORS.darkGrey} style={styles.buttonIcon} />
           <Text style={styles.detailsButtonText}>View Details</Text>
         </TouchableOpacity>
       </View>
       
       <View style={styles.actionButtonsContainer}>
         <Text style={styles.actionTitle}>Update Status:</Text>
-        <View style={styles.actionButtonsRow}>
+        <View style={styles.actionButtonsStack}>
           {order.status !== 'processing' && order.status !== 'delivered' && order.status !== 'cancelled' && (
             <TouchableOpacity 
               style={[
@@ -193,7 +251,7 @@ const OrderItem = ({
               onPress={() => onUpdateStatus(order.orderId, 'processing')}
               disabled={loading}
             >
-              <Ionicons name="time-outline" size={18} color="#FFFFFF" style={styles.buttonIcon} />
+              <Ionicons name="time-outline" size={18} color={LEGO_COLORS.white} style={styles.buttonIcon} />
               <Text style={styles.actionTextButtonLabel}>Processing</Text>
             </TouchableOpacity>
           )}
@@ -208,7 +266,7 @@ const OrderItem = ({
               onPress={() => onUpdateStatus(order.orderId, 'delivered')}
               disabled={loading}
             >
-              <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" style={styles.buttonIcon} />
+              <Ionicons name="checkmark-circle-outline" size={18} color={LEGO_COLORS.white} style={styles.buttonIcon} />
               <Text style={styles.actionTextButtonLabel}>Delivered</Text>
             </TouchableOpacity>
           )}
@@ -223,7 +281,7 @@ const OrderItem = ({
               onPress={() => onUpdateStatus(order.orderId, 'cancelled')}
               disabled={loading}
             >
-              <Ionicons name="close-circle-outline" size={18} color="#FFFFFF" style={styles.buttonIcon} />
+              <Ionicons name="close-circle-outline" size={18} color={LEGO_COLORS.white} style={styles.buttonIcon} />
               <Text style={styles.actionTextButtonLabel}>Cancel</Text>
             </TouchableOpacity>
           )}
@@ -319,65 +377,86 @@ export default function OrdersSection() {
 
   return (
     <SafeAreaView style={styles.safeArea}>
-      <StatusBar barStyle="dark-content" backgroundColor="#ffffff" />
-      <View style={styles.content}>
-        <View style={styles.header}>
-          <Text style={styles.title}>Orders Management</Text>
-        </View>
-        
-        <View style={styles.filterContainer}>
-          <TouchableOpacity 
-            style={[styles.filterChip, selectedFilter === 'all' && styles.activeFilter]}
-            onPress={() => setSelectedFilter('all')}
-          >
-            <Text style={selectedFilter === 'all' ? styles.activeFilterText : styles.filterText}>All</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.filterChip, selectedFilter === 'pending' && styles.activeFilter]}
-            onPress={() => setSelectedFilter('pending')}
-          >
-            <Text style={selectedFilter === 'pending' ? styles.activeFilterText : styles.filterText}>Pending</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.filterChip, selectedFilter === 'processing' && styles.activeFilter]}
-            onPress={() => setSelectedFilter('processing')}
-          >
-            <Text style={selectedFilter === 'processing' ? styles.activeFilterText : styles.filterText}>Processing</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.filterChip, selectedFilter === 'delivered' && styles.activeFilter]}
-            onPress={() => setSelectedFilter('delivered')}
-          >
-            <Text style={selectedFilter === 'delivered' ? styles.activeFilterText : styles.filterText}>Delivered</Text>
-          </TouchableOpacity>
-          <TouchableOpacity 
-            style={[styles.filterChip, selectedFilter === 'cancelled' && styles.activeFilter]}
-            onPress={() => setSelectedFilter('cancelled')}
-          >
-            <Text style={selectedFilter === 'cancelled' ? styles.activeFilterText : styles.filterText}>Cancelled</Text>
-          </TouchableOpacity>
-        </View>
-        
-        {loading && orders.length === 0 ? (
-          <View style={styles.loadingContainer}>
-            <Text style={styles.loadingText}>Loading orders...</Text>
+      <StatusBar barStyle="light-content" backgroundColor={LEGO_COLORS.red} />
+      <View style={styles.container}>
+        <View style={styles.contentContainer}>
+          {/* Extra Space */}
+          <View style={styles.headerSpacer} />
+          
+          {/* Page Title with LEGO-like header */}
+          <View style={styles.pageHeader}>
+            <View style={styles.logoContainer}>
+              <View style={styles.logoStuds}>
+                {[...Array(4)].map((_, i) => (
+                  <Stud key={i} color={LEGO_COLORS.yellow} size={14} />
+                ))}
+              </View>
+              <Text style={styles.pageHeaderTitle}>Order Management</Text>
+            </View>
+            <Text style={styles.pageHeaderSubtitle}>Manage customer orders and track status</Text>
           </View>
-        ) : (
-          <FlatList
-            data={getFilteredOrders()}
-            keyExtractor={(item) => item._id || item.orderId}
-            renderItem={({ item }) => (
-              <OrderItem 
-                order={item}
-                onViewDetails={viewOrderDetails}
-                onUpdateStatus={handleUpdateStatus}
-                loading={loading}
-              />
-            )}
-            contentContainerStyle={styles.listContent}
-            showsVerticalScrollIndicator={false}
-          />
-        )}
+          
+          <View style={styles.filterContainer}>
+            <TouchableOpacity 
+              style={[styles.filterChip, selectedFilter === 'all' && styles.activeFilter]}
+              onPress={() => setSelectedFilter('all')}
+            >
+              <Text style={selectedFilter === 'all' ? styles.activeFilterText : styles.filterText}>All</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.filterChip, selectedFilter === 'pending' && styles.activeFilter]}
+              onPress={() => setSelectedFilter('pending')}
+            >
+              <Text style={selectedFilter === 'pending' ? styles.activeFilterText : styles.filterText}>Pending</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.filterChip, selectedFilter === 'processing' && styles.activeFilter]}
+              onPress={() => setSelectedFilter('processing')}
+            >
+              <Text style={selectedFilter === 'processing' ? styles.activeFilterText : styles.filterText}>Processing</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.filterChip, selectedFilter === 'delivered' && styles.activeFilter]}
+              onPress={() => setSelectedFilter('delivered')}
+            >
+              <Text style={selectedFilter === 'delivered' ? styles.activeFilterText : styles.filterText}>Delivered</Text>
+            </TouchableOpacity>
+            <TouchableOpacity 
+              style={[styles.filterChip, selectedFilter === 'cancelled' && styles.activeFilter]}
+              onPress={() => setSelectedFilter('cancelled')}
+            >
+              <Text style={selectedFilter === 'cancelled' ? styles.activeFilterText : styles.filterText}>Cancelled</Text>
+            </TouchableOpacity>
+          </View>
+          
+          {loading && orders.length === 0 ? (
+            <View style={styles.loadingContainer}>
+              <Text style={styles.loadingText}>Building order list...</Text>
+            </View>
+          ) : (
+            <FlatList
+              data={getFilteredOrders()}
+              keyExtractor={(item) => item._id || item.orderId}
+              renderItem={({ item }) => (
+                <OrderItem 
+                  order={item}
+                  onViewDetails={viewOrderDetails}
+                  onUpdateStatus={handleUpdateStatus}
+                  loading={loading}
+                />
+              )}
+              contentContainerStyle={styles.listContent}
+              showsVerticalScrollIndicator={false}
+            />
+          )}
+          
+          {/* LEGO footer decoration */}
+          <View style={styles.legoFooter}>
+            {[...Array(8)].map((_, i) => (
+              <Stud key={i} color={i % 2 === 0 ? LEGO_COLORS.red : LEGO_COLORS.blue} size={16} />
+            ))}
+          </View>
+        </View>
       </View>
       
       <OrderDetailModal
@@ -390,44 +469,59 @@ export default function OrdersSection() {
 }
 
 const styles = StyleSheet.create({
-  // ...existing code...
-  loadingContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-    padding: 20,
-  },
-  loadingText: {
-    fontSize: 16,
-    color: '#666',
-  },
-  disabledButton: {
-    opacity: 0.5,
-  },
-  
   safeArea: {
     flex: 1,
-    backgroundColor: '#f5f5f5',
+    backgroundColor: LEGO_COLORS.red, // Match dashboard's red header
   },
-  content: {
+  container: {
+    flex: 1,
+    backgroundColor: LEGO_COLORS.lightGrey,
+  },
+  contentContainer: {
     flex: 1,
     padding: 20,
   },
-  header: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
-    marginBottom: 20,
+  headerSpacer: {
+    height: Platform.OS === 'ios' ? 15 : 25, // More space on Android
+    width: '100%',
   },
-  title: {
+  pageHeader: {
+    marginBottom: 24,
+    marginTop: 10, // Add top margin
+    borderBottomWidth: 4,
+    borderBottomColor: LEGO_COLORS.yellow,
+    paddingBottom: 12,
+  },
+  logoContainer: {
+    flexDirection: 'row',
+    alignItems: 'center',
+  },
+  logoStuds: {
+    flexDirection: 'row',
+    marginRight: 10,
+  },
+  pageHeaderTitle: {
     fontSize: 24,
     fontWeight: 'bold',
-    color: '#333333',
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+    color: LEGO_COLORS.black,
+    ...Platform.select({
+      ios: {
+        fontFamily: 'System',
+      },
+      android: {
+        fontFamily: 'sans-serif-black',
+      }
+    })
+  },
+  pageHeaderSubtitle: {
+    fontSize: 16,
+    color: LEGO_COLORS.darkGrey,
+    marginTop: 8,
+    marginLeft: 4,
   },
   filterContainer: {
     flexDirection: 'row',
-    marginBottom: 15,
+    marginBottom: 20,
     flexWrap: 'wrap',
   },
   filterChip: {
@@ -436,69 +530,82 @@ const styles = StyleSheet.create({
     borderRadius: 20,
     marginRight: 10,
     marginBottom: 8,
-    backgroundColor: '#ffffff',
-    borderWidth: 1,
-    borderColor: '#e0e0e0',
+    backgroundColor: LEGO_COLORS.white,
+    borderWidth: 2,
+    borderColor: LEGO_COLORS.darkGrey,
+    ...LEGO_SHADOW
   },
   activeFilter: {
-    backgroundColor: '#c41818',
-    borderColor: '#c41818',
+    backgroundColor: LEGO_COLORS.red,
+    borderColor: LEGO_COLORS.darkGrey,
   },
   filterText: {
-    color: '#666666',
+    color: LEGO_COLORS.darkGrey,
     fontSize: 14,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+    fontWeight: '500',
   },
   activeFilterText: {
-    color: '#ffffff',
+    color: LEGO_COLORS.white,
     fontSize: 14,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
     fontWeight: 'bold',
   },
   listContent: {
     paddingBottom: 20,
   },
   orderItem: {
-    backgroundColor: '#ffffff',
+    backgroundColor: LEGO_COLORS.white,
     borderRadius: 12,
     padding: 16,
-    marginBottom: 12,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.1,
-    shadowRadius: 3,
-    elevation: 2,
+    marginBottom: 16,
+    borderWidth: 2,
+    borderColor: LEGO_COLORS.darkGrey,
+    ...LEGO_SHADOW
+  },
+  orderStuds: {
+    flexDirection: 'row',
+    position: 'absolute',
+    top: -8,
+    left: 20,
   },
   orderHeader: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-    alignItems: 'center',
+    flexDirection: 'column',
     marginBottom: 12,
+    paddingTop: 8,
+  },
+  statusContainer: {
+    alignItems: 'flex-start',
+    marginBottom: 8,
   },
   orderId: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#333333',
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+    color: LEGO_COLORS.darkGrey,
+    ...Platform.select({
+      ios: {
+        fontFamily: 'System',
+      },
+      android: {
+        fontFamily: 'sans-serif-medium',
+      }
+    })
   },
   statusChip: {
-    paddingHorizontal: 10,
-    paddingVertical: 4,
-    borderRadius: 12,
+    paddingHorizontal: 12,
+    paddingVertical: 6,
+    borderRadius: 16,
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.darkGrey,
   },
   statusText: {
-    color: '#FFFFFF',
     fontSize: 12,
     fontWeight: 'bold',
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+    textTransform: 'uppercase',
+    letterSpacing: 0.5,
   },
   orderDetails: {
-    borderBottomWidth: 1,
-    borderTopWidth: 1,
-    borderColor: '#f0f0f0',
+    borderBottomWidth: 2,
+    borderTopWidth: 2,
+    borderColor: LEGO_COLORS.lightGrey,
     paddingVertical: 12,
     marginBottom: 12,
   },
@@ -509,9 +616,8 @@ const styles = StyleSheet.create({
   },
   detailText: {
     marginLeft: 8,
-    color: '#666666',
+    color: LEGO_COLORS.darkGrey,
     fontSize: 14,
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   },
   orderFooter: {
     flexDirection: 'row',
@@ -520,25 +626,25 @@ const styles = StyleSheet.create({
     marginBottom: 12,
   },
   orderTotal: {
-    fontSize: 16,
+    fontSize: 18,
     fontWeight: 'bold',
-    color: '#333333',
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+    color: LEGO_COLORS.black,
   },
   detailsButton: {
-    backgroundColor: '#e8e8e8',
+    backgroundColor: LEGO_COLORS.lightGrey,
     paddingVertical: 8,
     paddingHorizontal: 14,
     borderRadius: 6,
     flexDirection: 'row',
     alignItems: 'center',
     justifyContent: 'center',
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.darkGrey,
   },
   detailsButtonText: {
-    color: '#333',
+    color: LEGO_COLORS.darkGrey,
     fontSize: 14,
     fontWeight: '500',
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
   },
   actionButtonsContainer: {
     marginTop: 8,
@@ -546,7 +652,7 @@ const styles = StyleSheet.create({
   actionTitle: {
     fontSize: 14,
     fontWeight: '500',
-    color: '#666',
+    color: LEGO_COLORS.darkGrey,
     marginBottom: 8,
     paddingLeft: 4,
   },
@@ -554,38 +660,52 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     justifyContent: 'space-between',
   },
+  actionButtonsStack: {
+    flexDirection: 'column',
+    gap: 8,
+  },
   actionTextButton: {
-    flex: 1,
     flexDirection: 'row',
-    paddingVertical: 10,
-    paddingHorizontal: 10,
+    paddingVertical: 12,
+    paddingHorizontal: 12,
     borderRadius: 8,
-    marginHorizontal: 4,
     alignItems: 'center',
     justifyContent: 'center',
-    elevation: 2,
-    shadowColor: '#000',
-    shadowOffset: { width: 0, height: 1 },
-    shadowOpacity: 0.2,
-    shadowRadius: 1.5,
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.darkGrey,
+    ...LEGO_SHADOW
   },
   buttonIcon: {
-    marginRight: 6,
+    marginRight: 8,
   },
   processingButton: {
-    backgroundColor: '#2196F3',
+    backgroundColor: LEGO_COLORS.blue,
   },
   deliveredButton: {
-    backgroundColor: '#4CAF50',
+    backgroundColor: LEGO_COLORS.green,
   },
   cancelButton: {
-    backgroundColor: '#F44336',
+    backgroundColor: LEGO_COLORS.red,
   },
   actionTextButtonLabel: {
-    color: '#ffffff',
-    fontSize: 14,
+    color: LEGO_COLORS.white,
+    fontSize: 15,
     fontWeight: 'bold',
-    fontFamily: Platform.OS === 'ios' ? 'System' : 'sans-serif',
+    textAlign: 'center',
+  },
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: LEGO_COLORS.darkGrey,
+    fontWeight: '500',
+  },
+  disabledButton: {
+    opacity: 0.5,
   },
   modalOverlay: {
     flex: 1,
@@ -596,31 +716,26 @@ const styles = StyleSheet.create({
   modalContent: {
     width: '90%',
     maxHeight: '80%',
-    backgroundColor: '#fff',
+    backgroundColor: LEGO_COLORS.white,
     borderRadius: 12,
     padding: 20,
-    shadowColor: '#000',
-    shadowOffset: {
-      width: 0,
-      height: 2,
-    },
-    shadowOpacity: 0.25,
-    shadowRadius: 3.84,
-    elevation: 5,
+    borderWidth: 3,
+    borderColor: LEGO_COLORS.darkGrey,
+    ...LEGO_SHADOW
   },
   modalHeader: {
     flexDirection: 'row',
     justifyContent: 'space-between',
     alignItems: 'center',
     marginBottom: 15,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomWidth: 3,
+    borderBottomColor: LEGO_COLORS.yellow,
     paddingBottom: 15,
   },
   modalTitle: {
     fontSize: 18,
     fontWeight: 'bold',
-    color: '#333',
+    color: LEGO_COLORS.darkGrey,
   },
   modalSection: {
     marginBottom: 20,
@@ -628,16 +743,18 @@ const styles = StyleSheet.create({
   sectionTitle: {
     fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: LEGO_COLORS.darkGrey,
     marginBottom: 12,
-    borderBottomWidth: 1,
-    borderBottomColor: '#f0f0f0',
+    borderBottomWidth: 2,
+    borderBottomColor: LEGO_COLORS.lightGrey,
     paddingBottom: 8,
   },
   customerInfoContainer: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: LEGO_COLORS.lightGrey,
     borderRadius: 8,
-    padding: 10,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.darkGrey,
   },
   customerInfoItem: {
     flexDirection: 'row',
@@ -646,10 +763,12 @@ const styles = StyleSheet.create({
   },
   orderItemCard: {
     flexDirection: 'row',
-    backgroundColor: '#f9f9f9',
+    backgroundColor: LEGO_COLORS.lightGrey,
     borderRadius: 8,
     marginBottom: 10,
     overflow: 'hidden',
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.darkGrey,
   },
   productImage: {
     width: 80,
@@ -669,7 +788,7 @@ const styles = StyleSheet.create({
   itemName: {
     fontSize: 15,
     fontWeight: 'bold',
-    color: '#333',
+    color: LEGO_COLORS.darkGrey,
     marginBottom: 6,
   },
   itemRow: {
@@ -683,27 +802,31 @@ const styles = StyleSheet.create({
   },
   itemValue: {
     fontSize: 14,
-    color: '#333',
+    color: LEGO_COLORS.darkGrey,
     fontWeight: '500',
   },
   paymentMethodContainer: {
     flexDirection: 'row',
     alignItems: 'center',
-    backgroundColor: '#f9f9f9',
+    backgroundColor: LEGO_COLORS.lightGrey,
     borderRadius: 8,
-    padding: 10,
+    padding: 12,
     marginBottom: 10,
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.darkGrey,
   },
   paymentMethodText: {
     marginLeft: 10,
     fontSize: 14,
-    color: '#333',
+    color: LEGO_COLORS.darkGrey,
     fontWeight: '500',
   },
   paymentDetails: {
-    backgroundColor: '#f9f9f9',
+    backgroundColor: LEGO_COLORS.lightGrey,
     borderRadius: 8,
-    padding: 10,
+    padding: 12,
+    borderWidth: 1.5,
+    borderColor: LEGO_COLORS.darkGrey,
   },
   paymentRow: {
     flexDirection: 'row',
@@ -716,22 +839,27 @@ const styles = StyleSheet.create({
   },
   paymentValue: {
     fontSize: 14,
-    color: '#333',
+    color: LEGO_COLORS.darkGrey,
   },
   totalRow: {
-    borderTopWidth: 1,
-    borderTopColor: '#e0e0e0',
+    borderTopWidth: 2,
+    borderTopColor: LEGO_COLORS.darkGrey,
     marginTop: 5,
-    paddingTop: 5,
+    paddingTop: 8,
   },
   totalLabel: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#333',
+    color: LEGO_COLORS.darkGrey,
   },
   totalValue: {
-    fontSize: 15,
+    fontSize: 16,
     fontWeight: 'bold',
-    color: '#c41818',
+    color: LEGO_COLORS.red,
+  },
+  legoFooter: {
+    flexDirection: 'row',
+    justifyContent: 'center',
+    paddingVertical: 20,
   },
 });
