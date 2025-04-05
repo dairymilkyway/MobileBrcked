@@ -68,7 +68,8 @@ function NotificationSetup() {
     const data = response.notification.request.content.data;
     
     // Check if this is an order notification
-    if ((data?.type === 'orderUpdate' && data?.orderId) || data?.orderId) {
+    // This is ONLY triggered when a notification is explicitly clicked by the user
+    if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
       // Add a notification to the Redux store, which will trigger the UI to show the order details modal
       dispatch(
         addNotification({
@@ -79,7 +80,8 @@ function NotificationSetup() {
             // Ensure it has the expected format for our NotificationBell component
             type: data.type || 'orderUpdate',
             orderId: data.orderId,
-            showModal: true // Add this flag to indicate the modal should be shown
+            showModal: true, // This flag indicates the modal should be shown
+            clicked: true // Add explicit clicked flag to indicate user interaction
           }
         })
       );
@@ -515,7 +517,7 @@ export default function RootLayout() {
     }
   }, [loaded]);
 
-  // Add this effect to check for notification that launched the app
+  // Add a function to check if app was opened from a notification
   useEffect(() => {
     // Check if app was opened from a notification
     const getInitialNotification = async () => {
@@ -530,7 +532,8 @@ export default function RootLayout() {
           const data = response.notification.request.content.data;
           
           // If this is an order notification, add it to the store with the showModal flag
-          if ((data?.type === 'orderUpdate' && data?.orderId) || data?.orderId) {
+          // This is ONLY for notifications that were CLICKED to open the app
+          if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
             console.log('Initial notification has order ID:', data.orderId);
             
             // We need to delay this slightly to ensure the store is ready
@@ -543,7 +546,8 @@ export default function RootLayout() {
                     ...data,
                     type: data.type || 'orderUpdate',
                     orderId: data.orderId,
-                    showModal: true // This is important to trigger the modal
+                    showModal: true, // This flag indicates the notification was clicked
+                    clicked: true // Add explicit clicked flag
                   }
                 })
               );

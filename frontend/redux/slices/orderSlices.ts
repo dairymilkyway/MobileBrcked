@@ -220,8 +220,11 @@ const orderSlice = createSlice({
   initialState,
   reducers: {
     resetOrderState: (state) => {
+      // Fully reset order creation state
       state.error = null;
       state.success = false;
+      state.selectedOrder = null; // Ensure selected order is cleared
+      state.loading = false; // Reset loading state
     },
     setSelectedOrder: (state, action: PayloadAction<Order | null>) => {
       state.selectedOrder = action.payload;

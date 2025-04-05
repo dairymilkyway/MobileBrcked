@@ -5,7 +5,7 @@ const Cart = require('../models/Cart');
 const Product = require('../models/Product');
 const User = require('../models/User');
 const authenticateToken = require('../middleware/auth');
-const { sendOrderStatusNotification } = require('../utils/notificationService');
+const { sendOrderStatusNotification, sendOrderPlacedNotification } = require('../utils/notificationService');
 
 // Helper function to get order status message
 const getStatusMessage = (orderId, status) => {
@@ -94,58 +94,128 @@ router.post('/create', authenticateToken, async (req, res) => {
     });
     
     const savedOrder = await order.save();
-    console.log('Order saved successfully:', savedOrder._id);
+    console.log(`Order ${orderId} saved successfully`);
     
-    // Update product stock quantities
-    const stockUpdatePromises = items.map(async (item) => {
-      try {
-        // Find the product by its MongoDB ID
-        const product = await Product.findById(item.productId);
+    // Update product stock quantities - subtract ordered quantities from stock
+    try {
+      console.log('Updating product stock quantities...');
+      
+      for (const item of items) {
+        const { productId, quantity } = item;
         
-        if (!product) {
-          console.log(`Product not found: ${item.productId}`);
-          return;
+        // Find the product and update its stock
+        const product = await Product.findById(productId);
+        
+        if (product) {
+          // Calculate new stock level (ensure it doesn't go below zero)
+          const newStock = Math.max(0, product.stock - quantity);
+          console.log(`Updating stock for product ${productId}: ${product.stock} -> ${newStock} (ordered: ${quantity})`);
+          
+          // Update the product stock
+          await Product.updateOne(
+            { _id: productId },
+            { $set: { stock: newStock } }
+          );
+        } else {
+          console.warn(`Product ${productId} not found when updating stock`);
+        }
+      }
+      
+      console.log('Product stock quantities updated successfully');
+    } catch (stockError) {
+      console.error('Error updating product stock quantities:', stockError);
+      // Continue since the order was created successfully
+    }
+    
+    // After saving the order, attempt to send a notification to the user
+    try {
+      // Find the user to get their push token - use findById with a fresh query to avoid stale data
+      const user = await User.findById(userId).select('pushToken email');
+      
+      console.log(`Notification attempt for order ${orderId}:`, {
+        userId,
+        userFound: !!user,
+        hasPushToken: user?.pushToken ? 'Yes' : 'No',
+        pushTokenValue: user?.pushToken?.substring(0, 10) + '...',
+        pushTokenLength: user?.pushToken?.length
+      });
+      
+      if (user && user.pushToken) {
+        console.log(`User ${userId} has push token: ${user.pushToken}`);
+        
+        // Add random identifier to prevent notification deduplication by expo
+        const uniqueTimestamp = Date.now() + Math.floor(Math.random() * 1000);
+        
+        // Send the order placed notification
+        const notificationResult = await sendOrderPlacedNotification(
+          user.pushToken,
+          orderId,
+          total,
+          uniqueTimestamp // Use a unique timestamp for each notification
+        );
+        
+        // Log detailed notification result
+        console.log(`Notification result for order ${orderId}:`, JSON.stringify(notificationResult));
+        
+        if (notificationResult.success) {
+          console.log(`Order placed notification sent successfully to user ${userId} for order ${orderId}`);
+        } else {
+          console.error(`Failed to send order placed notification: ${notificationResult.error || 'Unknown error'}`);
         }
         
-        // Calculate new stock quantity
-        const newStock = Math.max(0, product.stock - item.quantity);
-        console.log(`Updating stock for product ${product.name} from ${product.stock} to ${newStock}`);
-        
-        // Update the product stock
-        await Product.findByIdAndUpdate(
-          item.productId,
-          { $set: { stock: newStock } },
-          { new: true }
-        );
-      } catch (stockError) {
-        console.error(`Error updating stock for product ${item.productId}:`, stockError);
-        // Continue processing other products even if one fails
+        // Create a notification receipt
+        try {
+          // Get notification receipt model
+          const NotificationReceipt = require('mongoose').model('NotificationReceipt');
+          
+          // Create receipt with unique ID
+          const timestamp = uniqueTimestamp; // Use the same unique timestamp
+          const message = `Your Order Placed Successfully!`;
+          const receipt = new NotificationReceipt({
+            orderId,
+            userId,
+            status: 'pending',
+            message,
+            timestamp: new Date(),
+            forceShow: true,
+            showModal: true,
+            uniqueId: `order-placed-${orderId}-${timestamp}`
+          });
+          
+          await receipt.save();
+          console.log(`Order placed notification receipt created for order ${orderId}`);
+        } catch (receiptError) {
+          console.error('Error creating order placed notification receipt:', receiptError);
+          // Continue anyway since the order was created successfully
+        }
+      } else {
+        console.log(`User ${userId} doesn't have a push token configured, skipping notification`);
       }
-    });
+    } catch (notificationError) {
+      console.error('Error sending order placed notification:', notificationError);
+      // Continue since the order was created successfully
+    }
     
-    // Wait for all stock updates to complete
-    await Promise.all(stockUpdatePromises);
-    console.log('Finished updating product stock quantities');
-    
-    // Delete the items from cart using cart item IDs instead of product IDs
-    // The frontend sends cart items with 'id' which is the SQLite primary key
-    const cartItemIds = items.map(item => item.id).filter(id => id);
-    console.log('Removing items from cart with cartItemIds:', cartItemIds);
-    
-    if (cartItemIds.length > 0) {
-      try {
-        const deleteResult = await Cart.destroy({
-          where: {
-            id: cartItemIds
-          }
-        });
-        console.log('Items removed from cart:', deleteResult);
-      } catch (cartError) {
-        console.error('Error removing items from cart but order was created:', cartError);
-        // Continue since the order was created successfully
-      }
-    } else {
-      console.log('No valid cart IDs found to remove');
+    // Empty only the ordered items from the user's cart after successful order creation
+    try {
+      console.log(`Removing ordered items from cart for user ${userId}...`);
+      
+      // Get the product IDs from the order items
+      const orderedProductIds = items.map(item => item.productId);
+      console.log(`Ordered product IDs:`, orderedProductIds);
+      
+      // Delete only the items that were ordered
+      const deleteCount = await Cart.destroy({
+        where: { 
+          userId: userId,
+          productId: orderedProductIds 
+        }
+      });
+      
+      console.log(`Removed ${deleteCount} items from cart for user ${userId}`);
+    } catch (cartError) {
+      console.error('Error removing ordered items from cart:', cartError);
+      // Continue since the order was created successfully
     }
     
     res.status(201).json({

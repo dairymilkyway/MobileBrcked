@@ -47,7 +47,15 @@ export default function OrderConfirmationScreen() {
       const orderId = params?.orderId;
       
       if (orderId) {
+        console.log('Order confirmation screen: Loading order with ID:', orderId);
+        
+        // Reset any previous order data before fetching new data
+        dispatch({ type: 'orders/resetOrderState' });
+        
+        // Fetch the specific order by ID to ensure we have the latest data
         dispatch(fetchOrderById(orderId));
+      } else {
+        console.warn('No orderId provided to order confirmation screen');
       }
       
       // Return a cleanup function if needed

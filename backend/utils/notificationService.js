@@ -23,15 +23,18 @@ const sendPushNotification = async (pushToken, title, body, data = {}) => {
   // Check if the push token is valid
   if (!pushToken) {
     console.error('Push token is null or empty');
-    return { error: 'Push token is null or empty' };
+    return { success: false, error: 'Push token is null or empty' };
   }
   
   // Check if the push token is valid
   if (!Expo.isExpoPushToken(pushToken)) {
     console.error(`Push token ${pushToken} is not a valid Expo push token`);
-    return { error: 'Invalid push token' };
+    return { success: false, error: 'Invalid push token' };
   }
 
+  // Ensure uniqueness to prevent Expo from deduplicating notifications
+  const uniqueId = data.timestamp || Date.now() + Math.floor(Math.random() * 1000);
+  
   // Construct the message
   const message = {
     to: pushToken,
@@ -44,7 +47,8 @@ const sendPushNotification = async (pushToken, title, body, data = {}) => {
       body,
       orderId: data.orderId, // Ensure orderId is in the right place
       status: data.status,
-      showModal: data.showModal || false
+      showModal: data.showModal || false,
+      uniqueId // Ensure every notification has a unique identifier
     },
     priority: 'high', // Add high priority
     channelId: data.channelId || 'default', // Use channel from data or default
@@ -84,14 +88,14 @@ const sendPushNotification = async (pushToken, title, body, data = {}) => {
       try {
         console.log(`Sending chunk ${i + 1}/${chunks.length}...`);
         const ticketChunk = await expo.sendPushNotificationsAsync(chunk);
-        console.log('Ticket chunk response:', ticketChunk);
+        console.log('Ticket chunk response:', JSON.stringify(ticketChunk));
         tickets.push(...ticketChunk);
       } catch (error) {
         console.error(`Error sending chunk ${i + 1}/${chunks.length}:`, error);
       }
     }
 
-    console.log('Push notification tickets:', tickets);
+    console.log('Push notification tickets:', JSON.stringify(tickets));
     
     // Check for errors in tickets
     const errors = tickets.filter(ticket => ticket.status === 'error');
@@ -105,10 +109,10 @@ const sendPushNotification = async (pushToken, title, body, data = {}) => {
     }
 
     console.log('Push notification sent successfully to', pushToken);
-    return { success: true, tickets };
+    return { success: true, tickets, uniqueId };
   } catch (error) {
     console.error('Error sending push notification:', error);
-    return { error: error.message };
+    return { success: false, error: error.message };
   }
 };
 
@@ -164,7 +168,46 @@ const sendOrderStatusNotification = async (pushToken, orderId, status) => {
   );
 };
 
+/**
+ * Send order placed notification to a user
+ * @param {string} pushToken - The Expo push token
+ * @param {string} orderId - The order ID
+ * @param {number} total - The order total
+ * @param {number} timestamp - Optional timestamp for uniqueness
+ * @returns {Promise<Object>} - Result of the notification
+ */
+const sendOrderPlacedNotification = async (pushToken, orderId, total, timestamp = Date.now()) => {
+  console.log(`Preparing order placed notification for order #${orderId} with timestamp ${timestamp}`);
+  
+  const title = 'Order Placed';
+  const body = `Your Order Placed Successfully!`;
+
+  // Use a dedicated order-updates channel with higher importance
+  return sendPushNotification(
+    pushToken, 
+    title, 
+    body, 
+    { 
+      orderId, 
+      status: 'pending',
+      type: 'orderPlaced',
+      importance: 'high',
+      channelId: 'order-updates',
+      showModal: true, // Add flag for modal to show when notification is tapped
+      forceShow: true,  // Ensure notification is shown even if app is in foreground
+      // Add additional metadata for iOS
+      _displayInForeground: true,
+      _contentAvailable: true,
+      _category: 'ORDER_PLACED',
+      _mutableContent: true,
+      timestamp, // Add timestamp for uniqueness
+      uniqueId: `order-placed-${orderId}-${timestamp}` // Additional uniqueness
+    }
+  );
+};
+
 module.exports = {
   sendPushNotification,
   sendOrderStatusNotification,
+  sendOrderPlacedNotification,
 }; 

@@ -267,4 +267,125 @@ router.post('/simulate-order-notification', authenticateToken, async (req, res) 
   }
 });
 
+// Test endpoint to simulate an order placed notification
+router.post('/simulate-order-placed', authenticateToken, async (req, res) => {
+  try {
+    const { orderId, timestamp = Date.now() + Math.floor(Math.random() * 1000), total = 99.99 } = req.body;
+    
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required field: orderId'
+      });
+    }
+    
+    console.log(`Simulating order placed notification for order ${orderId} with timestamp ${timestamp}`);
+    
+    // Get the current user's push token - use a fresh query to get up-to-date token
+    const user = await User.findById(req.user.id).select('pushToken email');
+    
+    console.log(`User found: ${!!user}, Push token exists: ${user?.pushToken ? 'Yes' : 'No'}`);
+    if (user?.pushToken) {
+      console.log(`Token starts with: ${user.pushToken.substring(0, 15)}...`);
+    }
+    
+    if (!user || !user.pushToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'User does not have a push token registered'
+      });
+    }
+    
+    // Check if the order exists and belongs to the user
+    const order = await Order.findOne({ orderId, userId: req.user.id });
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found or does not belong to this user'
+      });
+    }
+    
+    // Prepare notification data with guaranteed uniqueness
+    const title = 'Order Placed';
+    const body = `Your Order Placed Successfully!`;
+    const uniqueId = `order-placed-${orderId}-${timestamp}`;
+    
+    // Send the notification with special payload for modal display
+    const result = await sendPushNotification(
+      user.pushToken,
+      title,
+      body,
+      { 
+        type: 'orderPlaced',
+        orderId,
+        status: 'pending',
+        showModal: true, // Special flag to directly show the modal
+        forceShow: true,  // Force notification to show 
+        immediate: true,  // Show immediately
+        timestamp,        // Add timestamp for uniqueness
+        uniqueId          // Additional uniqueness
+      }
+    );
+    
+    console.log(`Notification result:`, JSON.stringify(result));
+    
+    if (result.error) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to send notification',
+        error: result.error
+      });
+    }
+    
+    // Also add a receipt to the database
+    try {
+      const NotificationReceipt = mongoose.model('NotificationReceipt');
+      
+      const receipt = new NotificationReceipt({
+        orderId,
+        userId: req.user.id,
+        status: 'pending',
+        previousStatus: order.status,
+        message: body,
+        timestamp: new Date(),
+        forceShow: true,
+        showModal: true, // Add the showModal flag here too
+        uniqueId         // Use the same unique ID for consistency
+      });
+      
+      await receipt.save();
+      console.log(`Notification receipt created with ID: ${uniqueId}`);
+    } catch (error) {
+      console.error('Error creating notification receipt:', error);
+      // Continue since the notification was sent
+    }
+    
+    // Also add the notification data to the response for debugging
+    res.json({
+      success: true,
+      message: 'Order placed notification sent successfully',
+      data: {
+        ...result,
+        notificationData: { 
+          type: 'orderPlaced',
+          orderId,
+          status: 'pending',
+          showModal: true,
+          forceShow: true,
+          immediate: true,
+          timestamp,
+          uniqueId
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error sending test order placed notification:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send test order placed notification',
+      error: error.message
+    });
+  }
+});
+
 module.exports = router; 

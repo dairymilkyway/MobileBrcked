@@ -79,10 +79,13 @@ export default function NotificationBell() {
     console.log('Notification pressed:', { id, data });
 
     // Check if this is an order notification
-    if (data?.type === 'orderUpdate' && data?.orderId) {
+    if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
       console.log('Order notification detected, orderId:', data.orderId);
       // Close the notifications modal
       setModalVisible(false);
+      
+      // Mark this notification as clicked
+      data.clicked = true;
       
       // Use the OrderModalContext to show the order details
       showOrderModal(data.orderId);
@@ -90,6 +93,10 @@ export default function NotificationBell() {
       console.log('Generic order notification detected, orderId:', data.orderId);
       // For backward compatibility with older notifications
       setModalVisible(false);
+      
+      // Mark this notification as clicked
+      if (data) data.clicked = true;
+      
       showOrderModal(data.orderId);
     }
   };

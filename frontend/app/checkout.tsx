@@ -269,7 +269,10 @@ export default function CheckoutScreen() {
     }
     
     try {
-      // Create order using Redux
+      // First, reset any existing order state to prevent stale data
+      dispatch(resetOrderState());
+      
+      // Create a unique order ID with timestamp to ensure uniqueness
       const orderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       
       // Create the order object
@@ -285,6 +288,8 @@ export default function CheckoutScreen() {
         status: 'pending',
         createdAt: new Date().toISOString(),
       };
+      
+      console.log('Creating new order:', orderId);
       
       // Dispatch the create order action
       dispatch(createOrder(orderData));

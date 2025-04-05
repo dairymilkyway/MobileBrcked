@@ -91,25 +91,6 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
   }, []);
 
-  // Check for notification responses
-  const checkNotificationResponse = async () => {
-    try {
-      const response = await Notifications.getLastNotificationResponseAsync();
-      
-      if (response) {
-        const data = response.notification.request.content.data;
-        
-        // If this is an order notification with orderId, show the modal
-        if ((data?.type === 'orderUpdate' && data?.orderId) || data?.orderId) {
-          console.log('Found notification response with order ID:', data.orderId);
-          showOrderModal(data.orderId);
-        }
-      }
-    } catch (error) {
-      console.error('Error checking notification response:', error);
-    }
-  };
-  
   // Listen for new notifications that might contain order updates
   useEffect(() => {
     if (notifications.length > 0) {
@@ -120,28 +101,35 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         read: latestNotification.read,
         dataType: latestNotification.data?.type,
         orderId: latestNotification.data?.orderId,
-        showModal: latestNotification.data?.showModal
+        showModal: latestNotification.data?.showModal,
+        source: latestNotification.data?.source
       });
       
-      // Don't re-open the modal if it was already opened recently (within 3 seconds)
-      const now = Date.now();
-      const minTimeBetweenModals = 3000; // 3 seconds
-      const canOpenModal = !modalOpenedTimestamp.current || 
-                           (now - modalOpenedTimestamp.current) > minTimeBetweenModals;
-      
-      // Check if this is a new (unread) order notification with showModal flag
-      if (
-        !latestNotification.read && 
-        canOpenModal && 
-        latestNotification.data?.type === 'orderUpdate' && 
-        latestNotification.data?.orderId && 
-        latestNotification.data?.showModal
-      ) {
-        console.log('Should show modal for order:', latestNotification.data.orderId);
-        showOrderModal(latestNotification.data.orderId);
-      }
+      // IMPORTANT: We no longer automatically open modals on new notifications
+      // This fixes the issue where modals would open on receipt of notifications
+      // Now, modals will only open when notifications are explicitly clicked
     }
   }, [notifications]);
+
+  // Check for notification responses
+  const checkNotificationResponse = async () => {
+    try {
+      const response = await Notifications.getLastNotificationResponseAsync();
+      
+      if (response) {
+        const data = response.notification.request.content.data;
+        
+        // If this is an order notification with orderId, show the modal
+        // Only shown when user explicitly clicked the notification
+        if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
+          console.log('Found notification response with order ID:', data.orderId);
+          showOrderModal(data.orderId);
+        }
+      }
+    } catch (error) {
+      console.error('Error checking notification response:', error);
+    }
+  };
 
   // Set up notification response listener
   useEffect(() => {
@@ -150,7 +138,8 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       const data = response.notification.request.content.data;
       
       // If this is an order notification with orderId, show the modal
-      if ((data?.type === 'orderUpdate' && data?.orderId) || data?.orderId) {
+      // Only shown when user explicitly clicked the notification
+      if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
         console.log('Notification response listener caught order ID:', data.orderId);
         showOrderModal(data.orderId);
       }
