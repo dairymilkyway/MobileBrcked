@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from 'react';
+import React, { useEffect, useState, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -16,7 +16,7 @@ import {
   SafeAreaView
 } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import { Link, useRouter } from 'expo-router';
+import { Link, useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { deleteProduct } from '../../../utils/api';
 import { Product } from '../../../types/product';
@@ -88,6 +88,21 @@ const ProductsAdminScreen = () => {
     }
   };
 
+  // Add useFocusEffect to refetch products whenever the screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchProductsData(currentPage);
+      return () => {
+        // Cleanup function if needed
+      };
+    }, [currentPage])
+  );
+
+  // Keep the original useEffect for initial load
+  useEffect(() => {
+    fetchProductsData();
+  }, []);
+
   const handleRefresh = () => {
     setRefreshing(true);
     fetchProductsData(1);
@@ -140,10 +155,6 @@ const ProductsAdminScreen = () => {
     dispatch(setCurrentPage(page));
     fetchProductsData(page);
   };
-
-  useEffect(() => {
-    fetchProductsData();
-  }, []);
 
   // Show error message if there was an error
   if (error) {

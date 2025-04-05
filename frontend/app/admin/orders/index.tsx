@@ -4,6 +4,7 @@ import { Ionicons } from '@expo/vector-icons';
 import * as Notifications from 'expo-notifications';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { fetchAdminOrders, updateOrderStatus, Order, resetOrderState, setSelectedOrder } from '@/redux/slices/orderSlices';
+import { useFocusEffect } from '@react-navigation/native';
 
 // Get screen dimensions for responsive sizing
 const { width: screenWidth, height: screenHeight } = Dimensions.get('window');
@@ -297,6 +298,17 @@ export default function OrdersSection() {
   
   const [selectedFilter, setSelectedFilter] = useState('all');
   const [modalVisible, setModalVisible] = useState(false);
+
+  // Refresh orders when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      dispatch(fetchAdminOrders());
+      
+      return () => {
+        // Optional cleanup if needed
+      };
+    }, [dispatch])
+  );
 
   // Fetch orders when component mounts
   useEffect(() => {

@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -12,6 +12,7 @@ import {
   ActivityIndicator
 } from 'react-native';
 import { BarChart, LineChart, PieChart } from 'react-native-chart-kit';
+import { useFocusEffect } from '@react-navigation/native';
 import AuthCheck from '../../components/AuthCheck';
 import { useAppDispatch, useAppSelector } from '../../redux/hooks';
 import { searchFilterProducts } from '../../redux/slices/productSlice';
@@ -121,51 +122,57 @@ const AdminDashboard = () => {
     return () => subscription.remove();
   }, []);
 
-  // Fetch user data
-  useEffect(() => {
-    const fetchUsers = async () => {
-      try {
-        setUsersLoading(true);
-        const token = await AsyncStorage.getItem('userToken');
-        
-        if (!token) {
-          console.error('No auth token found');
-          return;
-        }
-        
-        const response = await axios.get(`${API_BASE_URL}/users`, {
-          headers: {
-            Authorization: `Bearer ${token}`
+  // Replace the useEffect for fetching user data with useFocusEffect
+  useFocusEffect(
+    useCallback(() => {
+      const fetchUsers = async () => {
+        try {
+          setUsersLoading(true);
+          const token = await AsyncStorage.getItem('userToken');
+          
+          if (!token) {
+            console.error('No auth token found');
+            return;
           }
-        });
-        
-        setUsers(response.data);
-        setUsersError(null);
-      } catch (error) {
-        console.error('Error fetching users:', error);
-        setUsersError('Failed to load users');
-      } finally {
-        setUsersLoading(false);
-      }
-    };
+          
+          const response = await axios.get(`${API_BASE_URL}/users`, {
+            headers: {
+              Authorization: `Bearer ${token}`
+            }
+          });
+          
+          setUsers(response.data);
+          setUsersError(null);
+        } catch (error) {
+          console.error('Error fetching users:', error);
+          setUsersError('Failed to load users');
+        } finally {
+          setUsersLoading(false);
+        }
+      };
 
-    fetchUsers();
-  }, []);
+      fetchUsers();
+    }, [])
+  );
 
-  // Fetch product data and calculate statistics
-  useEffect(() => {
-    const fetchProductData = async () => {
-      // Load all products
-      dispatch(searchFilterProducts({ limit: 500 }));
-    };
+  // Replace the useEffect for fetching product data with useFocusEffect
+  useFocusEffect(
+    useCallback(() => {
+      const fetchProductData = async () => {
+        // Load all products
+        dispatch(searchFilterProducts({ limit: 500 }));
+      };
 
-    fetchProductData();
-  }, [dispatch]);
+      fetchProductData();
+    }, [dispatch])
+  );
 
-  // Fetch orders data
-  useEffect(() => {
-    dispatch(fetchAdminOrders());
-  }, [dispatch]);
+  // Replace the useEffect for fetching orders data with useFocusEffect
+  useFocusEffect(
+    useCallback(() => {
+      dispatch(fetchAdminOrders());
+    }, [dispatch])
+  );
 
   // Process order data when orders state changes
   useEffect(() => {

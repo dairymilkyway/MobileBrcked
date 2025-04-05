@@ -5,6 +5,7 @@ import { router } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_BASE_URL } from '../../../env';
+import { useFocusEffect } from '@react-navigation/native';
 
 // LEGO brand colors for professional theming
 const LEGO_COLORS = {
@@ -55,6 +56,22 @@ const AddUserScreen = () => {
     role: 'user',
   });
   const [loading, setLoading] = useState(false);
+
+  useFocusEffect(
+    React.useCallback(() => {
+      // Reset form data when screen comes into focus
+      setFormData({
+        username: '',
+        email: '',
+        password: '',
+        role: 'user',
+      });
+      
+      return () => {
+        // Clean up if needed when screen loses focus
+      };
+    }, [])
+  );
 
   const handleInputChange = (field: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));

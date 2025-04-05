@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import {
   SafeAreaView,
   Dimensions
 } from 'react-native';
-import { useRouter, useLocalSearchParams } from 'expo-router';
+import { useRouter, useLocalSearchParams, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { Dropdown } from 'react-native-element-dropdown';
@@ -90,16 +90,25 @@ const EditProductScreen = () => {
     removeImages: false,
   });
 
+  // Replace useEffect with useFocusEffect for data fetching when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (id) {
+        dispatch(fetchProductById(id));
+      }
+      
+      return () => {
+        // Clean up when screen loses focus
+      };
+    }, [id, dispatch])
+  );
+  
+  // Keep this useEffect for component unmounting cleanup
   useEffect(() => {
-    if (id) {
-      dispatch(fetchProductById(id));
-    }
-    
-    // Clear selected product when component unmounts
     return () => {
       dispatch(clearSelectedProduct());
     };
-  }, [id, dispatch]);
+  }, [dispatch]);
 
   useEffect(() => {
     if (selectedProduct) {

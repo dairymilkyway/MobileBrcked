@@ -1,9 +1,10 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, TextInput, TouchableOpacity, ScrollView, SafeAreaView, StatusBar, Alert, ActivityIndicator, Platform, KeyboardAvoidingView } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
 import { router, useLocalSearchParams } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
+import { useFocusEffect } from '@react-navigation/native';
 import { API_BASE_URL } from '../../../../env';
 
 // LEGO brand colors for professional theming
@@ -58,49 +59,55 @@ const EditUserScreen = () => {
   const [loading, setLoading] = useState(false);
   const [initialLoading, setInitialLoading] = useState(true);
 
-  // Fetch user data
-  useEffect(() => {
-    const fetchUser = async () => {
-      try {
-        setInitialLoading(true);
-        const token = await AsyncStorage.getItem('userToken');
-        
-        if (!token) {
-          router.replace('/Login');
-          return;
-        }
+  // Fetch user data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      const fetchUser = async () => {
+        try {
+          setInitialLoading(true);
+          const token = await AsyncStorage.getItem('userToken');
+          
+          if (!token) {
+            router.replace('/Login');
+            return;
+          }
 
-        const response = await axios.get(`${API_BASE_URL}/users/${id}`, {
-          headers: {
-            Authorization: `Bearer ${token}`,
-          },
-        });
+          const response = await axios.get(`${API_BASE_URL}/users/${id}`, {
+            headers: {
+              Authorization: `Bearer ${token}`,
+            },
+          });
 
-        const userData = response.data;
-        setFormData({
-          username: userData.username,
-          email: userData.email,
-          password: '', // Don't populate password for security reasons
-          role: userData.role,
-        });
-      } catch (error: any) {
-        console.error('Error fetching user:', error);
-        if (error.response?.status === 404) {
-          Alert.alert('Error', 'User not found', [
-            { text: 'OK', onPress: () => router.back() }
-          ]);
-        } else {
-          Alert.alert('Error', 'Failed to load user details');
+          const userData = response.data;
+          setFormData({
+            username: userData.username,
+            email: userData.email,
+            password: '', // Don't populate password for security reasons
+            role: userData.role,
+          });
+        } catch (error: any) {
+          console.error('Error fetching user:', error);
+          if (error.response?.status === 404) {
+            Alert.alert('Error', 'User not found', [
+              { text: 'OK', onPress: () => router.back() }
+            ]);
+          } else {
+            Alert.alert('Error', 'Failed to load user details');
+          }
+        } finally {
+          setInitialLoading(false);
         }
-      } finally {
-        setInitialLoading(false);
+      };
+
+      if (id) {
+        fetchUser();
       }
-    };
-
-    if (id) {
-      fetchUser();
-    }
-  }, [id]);
+      
+      return () => {
+        // Cleanup if needed when screen loses focus
+      };
+    }, [id])
+  );
 
   const handleInputChange = (field: keyof FormData, value: string) => {
     setFormData(prev => ({ ...prev, [field]: value }));

@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useCallback } from 'react';
 import {
   View,
   Text,
@@ -15,7 +15,7 @@ import {
   SafeAreaView,
   Dimensions
 } from 'react-native';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import * as ImagePicker from 'expo-image-picker';
 import { Ionicons } from '@expo/vector-icons';
 import { Dropdown } from 'react-native-element-dropdown';
@@ -82,6 +82,31 @@ const CreateProductScreen = () => {
     pieces: '1',
     images: [],
   });
+
+  // Add useFocusEffect hook to reset form data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      // This function will execute when the screen comes into focus
+      console.log('Create product screen focused');
+      // You can put any initialization logic here
+      // For example, reset the form when coming back to this screen
+      // Uncomment the following line if you want to reset form data on focus
+      // setFormData({
+      //   name: '',
+      //   price: '',
+      //   stock: '',
+      //   description: '',
+      //   category: 'Minifigure',
+      //   pieces: '1',
+      //   images: [],
+      // });
+      
+      // Return a cleanup function that will be called when the screen loses focus
+      return () => {
+        console.log('Create product screen unfocused');
+      };
+    }, [])
+  );
 
   const handleInputChange = (field: keyof ProductFormData, value: string) => {
     setFormData({ ...formData, [field]: value });
