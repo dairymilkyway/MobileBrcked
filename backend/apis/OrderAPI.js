@@ -130,25 +130,28 @@ router.post('/create', authenticateToken, async (req, res) => {
     // After saving the order, attempt to send a notification to the user
     try {
       // Find the user to get their push token - use findById with a fresh query to avoid stale data
-      const user = await User.findById(userId).select('pushToken email');
+      const user = await User.findById(userId).select('pushTokens email');
       
       console.log(`Notification attempt for order ${orderId}:`, {
         userId,
         userFound: !!user,
-        hasPushToken: user?.pushToken ? 'Yes' : 'No',
-        pushTokenValue: user?.pushToken?.substring(0, 10) + '...',
-        pushTokenLength: user?.pushToken?.length
+        hasPushTokens: user?.pushTokens?.length > 0 ? 'Yes' : 'No',
+        pushTokensCount: user?.pushTokens?.length || 0
       });
       
-      if (user && user.pushToken) {
-        console.log(`User ${userId} has push token: ${user.pushToken}`);
+      if (user && user.pushTokens && user.pushTokens.length > 0) {
+        // Get the most recently used token from the array
+        const mostRecentToken = user.pushTokens
+          .sort((a, b) => new Date(b.lastUsed) - new Date(a.lastUsed))[0]?.token;
+        
+        console.log(`User ${userId} has push tokens (${user.pushTokens.length}). Using most recent token: ${mostRecentToken?.substring(0, 15)}...`);
         
         // Add random identifier to prevent notification deduplication by expo
         const uniqueTimestamp = Date.now() + Math.floor(Math.random() * 1000);
         
         // Send the order placed notification
         const notificationResult = await sendOrderPlacedNotification(
-          user.pushToken,
+          mostRecentToken,
           orderId,
           total,
           uniqueTimestamp // Use a unique timestamp for each notification
@@ -189,7 +192,7 @@ router.post('/create', authenticateToken, async (req, res) => {
           // Continue anyway since the order was created successfully
         }
       } else {
-        console.log(`User ${userId} doesn't have a push token configured, skipping notification`);
+        console.log(`User ${userId} doesn't have any valid push tokens configured, skipping notification`);
       }
     } catch (notificationError) {
       console.error('Error sending order placed notification:', notificationError);
@@ -395,15 +398,15 @@ router.patch('/admin/status/:orderId', authenticateToken, async (req, res) => {
       console.log(`User found: ${user ? 'Yes' : 'No'}`);
       
       if (user) {
-        console.log(`User email: ${user.email}, Push token exists: ${user.pushToken ? 'Yes' : 'No'}`);
+        console.log(`User email: ${user.email}, Push token exists: ${user.pushTokens ? 'Yes' : 'No'}`);
       }
       
-      if (user && user.pushToken) {
-        console.log(`User has push token: ${user.pushToken}`);
+      if (user && user.pushTokens && user.pushTokens.length > 0) {
+        console.log(`User has push tokens: ${user.pushTokens.length}`);
         
         // Send the notification with special flags for immediate display
         const notificationResult = await sendOrderStatusNotification(
-          user.pushToken, 
+          user.pushTokens[user.pushTokens.length - 1].token, 
           orderId, 
           status
         );
@@ -416,8 +419,8 @@ router.patch('/admin/status/:orderId', authenticateToken, async (req, res) => {
           notificationError = notificationResult.error || 'Unknown error';
         }
       } else {
-        console.log(`User ${order.userId} doesn't have a push token configured`);
-        notificationError = 'User does not have a push token configured';
+        console.log(`User ${order.userId} doesn't have any valid push tokens configured`);
+        notificationError = 'User does not have any valid push tokens configured';
       }
     } catch (notificationError) {
       console.error('Error in notification process:', notificationError);
@@ -589,17 +592,17 @@ router.post('/test-notification/:orderId', authenticateToken, async (req, res) =
       });
     }
     
-    console.log(`User found: ${user._id}, Has push token: ${user.pushToken ? 'Yes' : 'No'}`);
+    console.log(`User found: ${user._id}, Has push token: ${user.pushTokens ? 'Yes' : 'No'}`);
     
-    if (!user.pushToken) {
+    if (!user.pushTokens || user.pushTokens.length === 0) {
       return res.status(400).json({
         success: false,
-        message: 'User does not have a push token registered'
+        message: 'User does not have any valid push tokens registered'
       });
     }
     
     // Send the notification
-    const notificationResult = await sendOrderStatusNotification(user.pushToken, orderId, status);
+    const notificationResult = await sendOrderStatusNotification(user.pushTokens[user.pushTokens.length - 1].token, orderId, status);
     
     if (notificationResult.success) {
       console.log(`Test push notification sent successfully to user ${user._id} for order ${orderId}`);

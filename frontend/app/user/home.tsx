@@ -112,7 +112,7 @@ export default function Home() {
         }
       };
       
-      // Fetch user notifications when the home screen becomes active
+      // Fetch user notifications directly from server when the home screen becomes active
       const loadUserNotifications = async () => {
         try {
           // Check if user is logged in
@@ -122,7 +122,7 @@ export default function Home() {
             return;
           }
           
-          console.log('Home screen: Fetching user notifications');
+          console.log('Home screen: Fetching user notifications from server');
           const notificationsResponse = await fetchUserNotifications();
           
           if (notificationsResponse.success && notificationsResponse.data) {
@@ -130,9 +130,13 @@ export default function Home() {
             dispatch(setNotifications(notificationsResponse.data));
           } else {
             console.log('Home screen: No notifications found or fetch failed');
+            // Initialize with empty array to mark as loaded
+            dispatch(setNotifications([]));
           }
         } catch (error) {
           console.error('Home screen: Error fetching notifications:', error);
+          // Initialize with empty array to mark as loaded
+          dispatch(setNotifications([]));
         }
       };
       

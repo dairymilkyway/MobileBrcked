@@ -110,8 +110,14 @@ export const registerForPushNotifications = async () => {
  */
 export const registerTokenWithServer = async (token, force = false) => {
   try {
+    console.log('Starting push token registration with server...');
+    
     const storedToken = await AsyncStorage.getItem('pushToken');
     const userToken = await AsyncStorage.getItem('userToken');
+    
+    console.log('Token registration - stored push token exists:', !!storedToken);
+    console.log('Token registration - received new token:', token);
+    console.log('Token registration - user token exists:', !!userToken);
     
     // If there's no user token, we can't register the push token
     if (!userToken) {
@@ -126,7 +132,7 @@ export const registerTokenWithServer = async (token, force = false) => {
       
       // Time between registrations (in milliseconds)
       // 3600000 = 1 hour, 86400000 = 24 hours
-      const REGISTRATION_INTERVAL = 3600000; // Changed to 1 hour
+      const REGISTRATION_INTERVAL = 3600000; // 1 hour
       
       // Only re-register if it's been more than the interval
       if (lastRegistered && (now - parseInt(lastRegistered)) < REGISTRATION_INTERVAL) {
@@ -135,34 +141,187 @@ export const registerTokenWithServer = async (token, force = false) => {
       }
     }
     
-    console.log('Registering push token with server at:', API_BASE_URL);
+    console.log('Getting device info for token registration...');
     
-    // Register the token with our server
-    const response = await axios.post(`${API_BASE_URL}/users/register-push-token`, 
-      { pushToken: token },
-      { 
-        headers: {
-          'Authorization': `Bearer ${userToken}`,
-          'Content-Type': 'application/json'
-        } 
+    // Get device info to store with token
+    let deviceInfo = 'unknown device';
+    try {
+      deviceInfo = await getDeviceInfo();
+      console.log('Device info:', deviceInfo);
+    } catch (deviceError) {
+      console.error('Error getting device info, using fallback:', deviceError);
+      deviceInfo = `${Platform.OS} device`;
+    }
+    
+    console.log(`Sending POST request to ${API_BASE_URL}/users/register-push-token`);
+    
+    // Try to register the token with our server
+    try {
+      const response = await axios.post(`${API_BASE_URL}/users/register-push-token`, 
+        { 
+          pushToken: token,
+          deviceInfo: deviceInfo
+        },
+        { 
+          headers: {
+            'Authorization': `Bearer ${userToken}`,
+            'Content-Type': 'application/json'
+          },
+          timeout: 10000 // 10 second timeout
+        }
+      );
+      
+      console.log('Token registration response status:', response.status);
+      
+      if (response.data && response.data.success) {
+        console.log('Push token registered successfully with server');
+        // Store the registration time
+        const now = new Date().getTime();
+        await AsyncStorage.setItem('tokenLastRegistered', now.toString());
+        await AsyncStorage.setItem('pushToken', token);
+        console.log('Token stored locally with timestamp:', now);
+        return true;
+      } else {
+        console.warn('Server returned unsuccessful response:', JSON.stringify(response.data));
+        // Still store the token locally to prevent excessive retries
+        await AsyncStorage.setItem('pushToken', token);
+        await AsyncStorage.setItem('tokenLastRegistered', new Date().getTime().toString());
+        return false;
       }
-    );
-    
-    if (response.data.success) {
-      console.log('Push token registered successfully with server');
-      // Store the registration time
-      await AsyncStorage.setItem('tokenLastRegistered', new Date().getTime().toString());
-      return true;
-    } else {
-      console.warn('Server returned unsuccessful response:', response.data);
+    } catch (apiError) {
+      console.error('Error calling register-push-token API:', apiError.message);
+      
+      if (apiError.response) {
+        console.error('Server response status:', apiError.response.status);
+        console.error('Server response data:', JSON.stringify(apiError.response.data));
+        
+        // For certain status codes, we'll still store the token locally
+        if (apiError.response.status === 500 || apiError.response.status === 503) {
+          console.log('Server error, storing token locally to prevent repeated attempts');
+          await AsyncStorage.setItem('pushToken', token);
+          await AsyncStorage.setItem('tokenLastRegistered', new Date().getTime().toString());
+        }
+      } else if (apiError.request) {
+        console.error('No response received from server. Request data:', JSON.stringify(apiError.request));
+        
+        // If it's a network error, store the token locally to prevent repeated attempts
+        console.log('Network error, storing token locally to prevent repeated attempts');
+        await AsyncStorage.setItem('pushToken', token);
+        await AsyncStorage.setItem('tokenLastRegistered', new Date().getTime().toString());
+      }
+      
       return false;
     }
   } catch (error) {
-    console.error('Error registering push token with server:', error.message);
-    if (error.response) {
-      console.error('Server response:', error.response.data);
-      console.error('Status code:', error.response.status);
+    console.error('Error in registerTokenWithServer function:', error.message);
+    
+    // Still store the token locally in case of errors to prevent excessive retries
+    try {
+      await AsyncStorage.setItem('pushToken', token);
+      await AsyncStorage.setItem('tokenLastRegistered', new Date().getTime().toString());
+      console.log('Stored token locally despite error');
+    } catch (storageError) {
+      console.error('Error storing token locally:', storageError);
     }
+    
+    return false;
+  }
+};
+
+/**
+ * Get device information for token tracking
+ * @returns {Promise<string>} Device information string
+ */
+const getDeviceInfo = async () => {
+  try {
+    let deviceName = 'Unknown Device';
+    
+    // Check if the getDeviceNameAsync function exists before calling it
+    if (Device && typeof Device.getDeviceNameAsync === 'function') {
+      try {
+        deviceName = await Device.getDeviceNameAsync();
+      } catch (nameError) {
+        console.log('Error getting device name:', nameError);
+      }
+    } else if (Device && Device.modelName) {
+      // Fallback to modelName if available
+      deviceName = Device.modelName;
+    }
+    
+    // Get device type safely
+    const deviceType = Device && Device.deviceType ? Device.deviceType : 'unknown';
+    
+    // Get OS version safely
+    const platformVersion = Device && Device.osVersion ? Device.osVersion : Platform.Version || 'unknown';
+    
+    return `${deviceName} (${Platform.OS} ${platformVersion}, ${deviceType})`;
+  } catch (error) {
+    console.error('Error getting device info:', error);
+    return `${Platform.OS} device`;
+  }
+};
+
+/**
+ * Remove push token from server on logout
+ * @returns {Promise<boolean>} Whether removal was successful
+ */
+export const removePushTokenOnLogout = async () => {
+  try {
+    console.log('Starting push token removal process...');
+    
+    const token = await AsyncStorage.getItem('pushToken');
+    const userToken = await AsyncStorage.getItem('userToken');
+    
+    console.log('Token removal check - pushToken exists:', !!token);
+    console.log('Token removal check - userToken exists:', !!userToken);
+    
+    if (!token || !userToken) {
+      console.log('No push token or user token available, nothing to remove');
+      // Clean up local storage anyway
+      await AsyncStorage.removeItem('pushToken');
+      await AsyncStorage.removeItem('tokenLastRegistered');
+      return true;
+    }
+    
+    try {
+      // Notify server to remove the token
+      console.log(`Attempting to remove push token from server: ${API_BASE_URL}/users/remove-push-token`);
+      const response = await axios.delete(`${API_BASE_URL}/users/remove-push-token`, {
+        headers: {
+          'Authorization': `Bearer ${userToken}`,
+          'Content-Type': 'application/json'
+        },
+        data: { pushToken: token }
+      });
+      
+      console.log('Push token removal response status:', response.status);
+      
+      if (response.data && response.data.success) {
+        console.log('Push token removed successfully from server');
+      } else {
+        console.warn('Server returned unsuccessful response:', response.data);
+      }
+    } catch (apiError) {
+      // If we get a 404, the endpoint might not exist yet, which is okay
+      if (apiError.response && apiError.response.status === 404) {
+        console.log('Token removal endpoint not found (404), continuing with logout...');
+      } else {
+        console.error('Error calling remove-push-token API:', apiError.message);
+        console.error('Full error:', JSON.stringify(apiError));
+      }
+    }
+    
+    // Always clean up local storage regardless of server response
+    console.log('Clearing push token from local storage');
+    await AsyncStorage.removeItem('pushToken');
+    await AsyncStorage.removeItem('tokenLastRegistered');
+    return true;
+  } catch (error) {
+    console.error('Error removing push token:', error.message);
+    console.error('Full error:', JSON.stringify(error));
+    // Still clear local storage even if there was an error
+    await AsyncStorage.removeItem('pushToken');
+    await AsyncStorage.removeItem('tokenLastRegistered');
     return false;
   }
 };
@@ -198,11 +357,29 @@ export const setupNotificationListeners = (onNotification) => {
  */
 export const registerPushTokenAfterLogin = async (force = false) => {
   try {
+    console.log('Starting push token registration after login...');
+    
     // Check if user has the correct role (only register for regular users)
     const userRole = await AsyncStorage.getItem('userRole');
+    const userToken = await AsyncStorage.getItem('userToken');
+    
+    console.log('Login push token check - userRole:', userRole);
+    console.log('Login push token check - userToken exists:', !!userToken);
+    
     if (userRole !== 'user') {
       console.log(`User has role '${userRole}', not registering push token for non-user roles`);
       return false;
+    }
+    
+    if (!userToken) {
+      console.log('No user auth token available, cannot register push token');
+      return false;
+    }
+    
+    // Clear any existing registration timestamp if forcing
+    if (force) {
+      await AsyncStorage.removeItem('tokenLastRegistered');
+      console.log('Force flag set, cleared last registration timestamp');
     }
     
     // Instead of checking for existing token, always request permissions and get a fresh token
@@ -210,23 +387,26 @@ export const registerPushTokenAfterLogin = async (force = false) => {
     const newToken = await registerForPushNotifications();
     
     if (!newToken) {
-      console.log('Failed to get push token after login');
+      console.log('Failed to get push token after login, permissions may have been denied');
       return false;
     }
     
-    const userToken = await AsyncStorage.getItem('userToken');
-    
-    if (!userToken) {
-      console.log('User is not logged in, cannot register push token');
-      return false;
-    }
-    
+    console.log('New push token obtained:', newToken);
     console.log('User is logged in with role "user", registering push token with server...');
     
     // Register with server, passing the force parameter
-    return registerTokenWithServer(newToken, force);
+    const registered = await registerTokenWithServer(newToken, force);
+    
+    if (registered) {
+      console.log('Push token successfully registered with server');
+      return true;
+    } else {
+      console.warn('Server registration of push token failed');
+      return false;
+    }
   } catch (error) {
     console.error('Error registering push token after login:', error);
+    console.error('Full error:', JSON.stringify(error));
     return false;
   }
 };
@@ -297,4 +477,5 @@ export default {
   registerPushTokenAfterLogin,
   forceRegisterPushToken,
   registerBackgroundNotificationHandler,
+  removePushTokenOnLogout,
 }; 

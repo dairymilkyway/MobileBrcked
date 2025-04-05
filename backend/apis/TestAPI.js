@@ -177,12 +177,16 @@ router.post('/simulate-order-notification', authenticateToken, async (req, res) 
     
     // Get the current user's push token
     const user = await User.findById(req.user.id);
-    if (!user || !user.pushToken) {
+    if (!user || !user.pushTokens || user.pushTokens.length === 0) {
       return res.status(400).json({
         success: false,
         message: 'User does not have a push token registered'
       });
     }
+    
+    // Get the most recent token
+    const mostRecentToken = user.pushTokens
+      .sort((a, b) => new Date(b.lastUsed) - new Date(a.lastUsed))[0]?.token;
     
     // Check if the order exists and belongs to the user
     const order = await Order.findOne({ orderId, userId: req.user.id });
@@ -199,7 +203,7 @@ router.post('/simulate-order-notification', authenticateToken, async (req, res) 
     
     // Send the notification with special payload for modal display
     const result = await sendPushNotification(
-      user.pushToken,
+      mostRecentToken,
       title,
       body,
       { 
@@ -220,48 +224,24 @@ router.post('/simulate-order-notification', authenticateToken, async (req, res) 
       });
     }
     
-    // Also add a receipt to the database
-    try {
-      const NotificationReceipt = mongoose.model('NotificationReceipt');
-      
-      const receipt = new NotificationReceipt({
-        orderId,
-        userId: req.user.id,
-        status: order.status,
-        previousStatus: order.status,
-        message: body,
-        timestamp: new Date(),
-        forceShow: true,
-        showModal: true // Add the showModal flag here too
-      });
-      
-      await receipt.save();
-    } catch (error) {
-      console.error('Error creating notification receipt:', error);
-      // Continue since the notification was sent
-    }
-    
-    // Also add the notification data to the response for debugging
-    res.json({
+    // Return detailed data for debugging
+    return res.json({
       success: true,
-      message: 'Order notification sent successfully',
+      message: 'Test notification sent successfully',
       data: {
-        ...result,
         notificationData: { 
           type: 'orderUpdate',
           orderId,
           status: order.status,
-          showModal: true,
-          forceShow: true,
-          immediate: true
+          showModal: true 
         }
       }
     });
   } catch (error) {
-    console.error('Error sending test order notification:', error);
-    res.status(500).json({
+    console.error('Error in simulate-order-notification:', error);
+    return res.status(500).json({
       success: false,
-      message: 'Failed to send test order notification',
+      message: 'Server error',
       error: error.message
     });
   }
@@ -282,19 +262,23 @@ router.post('/simulate-order-placed', authenticateToken, async (req, res) => {
     console.log(`Simulating order placed notification for order ${orderId} with timestamp ${timestamp}`);
     
     // Get the current user's push token - use a fresh query to get up-to-date token
-    const user = await User.findById(req.user.id).select('pushToken email');
+    const user = await User.findById(req.user.id).select('pushTokens email');
     
-    console.log(`User found: ${!!user}, Push token exists: ${user?.pushToken ? 'Yes' : 'No'}`);
-    if (user?.pushToken) {
-      console.log(`Token starts with: ${user.pushToken.substring(0, 15)}...`);
+    console.log(`User found: ${!!user}, Push tokens available: ${user?.pushTokens?.length > 0 ? 'Yes' : 'No'}`);
+    if (user?.pushTokens?.length > 0) {
+      console.log(`Available tokens: ${user.pushTokens.length}`);
     }
     
-    if (!user || !user.pushToken) {
+    if (!user || !user.pushTokens || user.pushTokens.length === 0) {
       return res.status(400).json({
         success: false,
         message: 'User does not have a push token registered'
       });
     }
+    
+    // Get the most recent token
+    const mostRecentToken = user.pushTokens
+      .sort((a, b) => new Date(b.lastUsed) - new Date(a.lastUsed))[0]?.token;
     
     // Check if the order exists and belongs to the user
     const order = await Order.findOne({ orderId, userId: req.user.id });
@@ -312,7 +296,7 @@ router.post('/simulate-order-placed', authenticateToken, async (req, res) => {
     
     // Send the notification with special payload for modal display
     const result = await sendPushNotification(
-      user.pushToken,
+      mostRecentToken,
       title,
       body,
       { 
@@ -379,10 +363,10 @@ router.post('/simulate-order-placed', authenticateToken, async (req, res) => {
       }
     });
   } catch (error) {
-    console.error('Error sending test order placed notification:', error);
+    console.error('Error in simulate-order-placed:', error);
     res.status(500).json({
       success: false,
-      message: 'Failed to send test order placed notification',
+      message: 'Server error',
       error: error.message
     });
   }

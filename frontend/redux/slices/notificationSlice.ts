@@ -22,48 +22,6 @@ const initialState: NotificationState = {
   isLoaded: false,
 };
 
-// Helper function to save notifications to AsyncStorage
-const saveNotificationsToStorage = async (notifications: Notification[]) => {
-  try {
-    const userId = await AsyncStorage.getItem('userId');
-    if (userId) {
-      // Create a deep copy without the proxy
-      const safeNotifications = notifications.map(notification => {
-        // Use a plain object to avoid proxy issues
-        const plainData = notification.data ? 
-          // Handle data safely with a try-catch
-          (() => {
-            try {
-              // Convert to JSON and back to remove proxy
-              return JSON.parse(JSON.stringify(notification.data));
-            } catch (error) {
-              console.log('Error converting notification data:', error);
-              // Return a minimal object with just the orderId if parsing fails
-              return { orderId: notification.data.orderId };
-            }
-          })() : 
-          undefined;
-        
-        // Return a plain object copy
-        return {
-          id: String(notification.id),
-          title: String(notification.title || ''),
-          body: String(notification.body || ''),
-          read: Boolean(notification.read),
-          createdAt: Number(notification.createdAt),
-          data: plainData
-        };
-      });
-      
-      // Store as JSON string
-      await AsyncStorage.setItem(`notifications_${userId}`, JSON.stringify(safeNotifications));
-      console.log(`Saved ${safeNotifications.length} notifications to storage for user ${userId}`);
-    }
-  } catch (error) {
-    console.error('Error saving notifications to storage:', error);
-  }
-};
-
 export const notificationSlice = createSlice({
   name: 'notifications',
   initialState,
@@ -72,9 +30,7 @@ export const notificationSlice = createSlice({
       state.notifications = action.payload;
       state.unreadCount = action.payload.filter(n => !n.read).length;
       state.isLoaded = true;
-      
-      // Save to AsyncStorage
-      saveNotificationsToStorage(action.payload);
+      // Storage saving removed to prevent Proxy handler errors
     },
     
     addNotification: (state, action: PayloadAction<Omit<Notification, 'id' | 'read' | 'createdAt'>>) => {
@@ -136,9 +92,6 @@ export const notificationSlice = createSlice({
               createdAt: Date.now(), // Update timestamp
             };
             
-            // Save to AsyncStorage
-            saveNotificationsToStorage(state.notifications);
-            
             // Don't increment unread count since it's just an update
             return;
           }
@@ -165,9 +118,6 @@ export const notificationSlice = createSlice({
         if (state.notifications.length > 20) {
           state.notifications = state.notifications.slice(0, 20);
         }
-        
-        // Save to AsyncStorage
-        saveNotificationsToStorage(state.notifications);
       } catch (error) {
         console.error('Error in addNotification reducer:', error);
       }
@@ -179,9 +129,6 @@ export const notificationSlice = createSlice({
       if (notification && !notification.read) {
         notification.read = true;
         state.unreadCount = Math.max(0, state.unreadCount - 1);
-        
-        // Save to AsyncStorage
-        saveNotificationsToStorage(state.notifications);
       }
     },
     
@@ -190,83 +137,21 @@ export const notificationSlice = createSlice({
         notification.read = true;
       });
       state.unreadCount = 0;
-      
-      // Save to AsyncStorage
-      saveNotificationsToStorage(state.notifications);
     },
     
     clearNotifications: (state) => {
       state.notifications = [];
       state.unreadCount = 0;
-      
-      // Save to AsyncStorage (empty array)
-      saveNotificationsToStorage([]);
     },
   },
 });
 
-// Helper function to load notifications from AsyncStorage
-export const loadNotificationsFromStorage = async () => {
-  try {
-    const userId = await AsyncStorage.getItem('userId');
-    if (!userId) {
-      console.log('No userId found for loading notifications');
-      return null;
-    }
-    
-    const storageKey = `notifications_${userId}`;
-    const storedNotificationsStr = await AsyncStorage.getItem(storageKey);
-    
-    if (!storedNotificationsStr) {
-      console.log(`No stored notifications found for user ${userId}`);
-      return null;
-    }
-    
-    try {
-      const storedNotifications = JSON.parse(storedNotificationsStr) as Notification[];
-      
-      // Validate the data structure
-      if (!Array.isArray(storedNotifications)) {
-        console.error('Stored notifications is not an array, resetting storage');
-        await AsyncStorage.removeItem(storageKey);
-        return null;
-      }
-      
-      // Filter out any invalid notifications
-      const validNotifications = storedNotifications.filter(notification => {
-        return notification && 
-               typeof notification === 'object' && 
-               notification.id && 
-               notification.title;
-      });
-      
-      // If we lost notifications during validation, save the valid ones back
-      if (validNotifications.length !== storedNotifications.length) {
-        console.log(`Filtered out ${storedNotifications.length - validNotifications.length} invalid notifications`);
-        // Save the valid notifications back to storage
-        await AsyncStorage.setItem(storageKey, JSON.stringify(validNotifications));
-      }
-      
-      console.log(`Successfully loaded ${validNotifications.length} notifications for user ${userId}`);
-      return validNotifications;
-    } catch (parseError) {
-      console.error('Error parsing stored notifications:', parseError);
-      // If we can't parse the data, clear it
-      await AsyncStorage.removeItem(storageKey);
-      return null;
-    }
-  } catch (error) {
-    console.error('Error loading notifications from storage:', error);
-    return null;
-  }
-};
-
-export const {
-  setNotifications,
-  addNotification,
-  markAsRead,
-  markAllAsRead,
-  clearNotifications,
+export const { 
+  setNotifications, 
+  addNotification, 
+  markAsRead, 
+  markAllAsRead, 
+  clearNotifications 
 } = notificationSlice.actions;
 
 export default notificationSlice.reducer; 

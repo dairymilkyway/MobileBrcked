@@ -134,6 +134,8 @@ export default function LoginScreen() {
           await AsyncStorage.removeItem('token');
           await AsyncStorage.removeItem('userToken');
           await AsyncStorage.removeItem('userRole');
+          await AsyncStorage.removeItem('pushToken');
+          await AsyncStorage.removeItem('tokenLastRegistered');
           
           // Ensure we save the token in BOTH places to maintain consistency
           console.log('Saving token to AsyncStorage, token length:', data.token.length);
@@ -155,7 +157,10 @@ export default function LoginScreen() {
             // Only register push tokens for users, not admins
             if (data.role === 'user') {
               console.log('Registering push notification token for user role...');
-              const registered = await registerPushTokenAfterLogin();
+              
+              // Force a fresh token registration
+              const registered = await registerPushTokenAfterLogin(true);
+              
               if (registered) {
                 console.log('Push notification token registered successfully after login');
                 

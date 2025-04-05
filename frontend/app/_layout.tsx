@@ -10,14 +10,17 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Provider, useDispatch } from 'react-redux';
 import { store } from '../redux/store';
 import { Alert, Platform } from 'react-native';
-import { registerForPushNotifications, registerTokenWithServer, setupNotificationListeners, registerBackgroundNotificationHandler } from '@/utils/notificationHelper';
+import { registerForPushNotifications, registerTokenWithServer, setupNotificationListeners, registerBackgroundNotificationHandler, removePushTokenOnLogout } from '@/utils/notificationHelper';
 import * as Notifications from 'expo-notifications';
-import { addNotification, setNotifications, loadNotificationsFromStorage } from '@/redux/slices/notificationSlice';
+import { addNotification, setNotifications } from '@/redux/slices/notificationSlice';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_BASE_URL } from '@/env';
 import { useAppDispatch } from '@/redux/hooks';
 import { OrderModalProvider } from '@/contexts/OrderModalContext';
+import { useRouter } from 'expo-router';
+import type { AppDispatch } from '@/redux/store';
+import { fetchUserNotifications } from '@/utils/api';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 
@@ -516,6 +519,121 @@ function NotificationSetup() {
   return null;
 }
 
+// Function to handle logout (with token removal)
+export const handleLogout = async (redirectToLogin = true, dispatch: AppDispatch | null = null) => {
+  try {
+    console.log('Starting logout process...');
+    
+    // Get the user token and role for logging
+    const userToken = await AsyncStorage.getItem('userToken');
+    const userRole = await AsyncStorage.getItem('userRole');
+    console.log('Logout - User token exists:', !!userToken);
+    console.log('Logout - User role:', userRole);
+    
+    // First try to unregister push token before the user token is removed
+    // so the API call can still be authenticated
+    console.log('Unregistering push token...');
+    await removePushTokenOnLogout();
+    
+    // Try to call the logout API if we have a token
+    if (userToken) {
+      try {
+        console.log(`Calling logout API at ${API_BASE_URL}/logout`);
+        const response = await axios.post(
+          `${API_BASE_URL}/logout`,
+          {}, // Empty body
+          {
+            headers: {
+              'Authorization': `Bearer ${userToken}`,
+              'Content-Type': 'application/json'
+            },
+            timeout: 5000 // 5 second timeout
+          }
+        );
+        console.log('Logout API response:', response.status);
+      } catch (error: any) {
+        // Log but continue with local logout even if server logout fails
+        console.error('Error calling logout API:', error.message);
+        if (error.response) {
+          console.error('Server response status:', error.response.status);
+        }
+      }
+    }
+    
+    // Always clear all local storage items regardless of API success
+    console.log('Clearing local storage items...');
+    const itemsToClear = [
+      'userToken', 
+      'token', 
+      'userId', 
+      'userRole', 
+      'userEmail',
+      'cartItems',
+      'selectedFilters',
+      'pushToken',
+      'tokenLastRegistered',
+      'pendingOrderModals',
+      'lastStatusUpdateCheck',
+      'lastReceiptCheck'
+    ];
+    
+    // Clear each item and log any errors
+    for (const item of itemsToClear) {
+      try {
+        await AsyncStorage.removeItem(item);
+      } catch (storageError) {
+        console.error(`Error clearing ${item} from storage:`, storageError);
+      }
+    }
+    
+    // Clear Redux state if dispatch is available
+    if (dispatch) {
+      console.log('Clearing Redux state...');
+      // Clear notification state
+      dispatch(setNotifications([]));
+      // Add other state resets here if needed
+    }
+    
+    console.log('Logout complete, preparing for redirect...');
+    
+    // Handle redirection if requested
+    if (redirectToLogin) {
+      console.log('Redirecting to login screen...');
+      
+      // Use timeout to ensure all async operations are complete
+      setTimeout(() => {
+        // For web
+        if (Platform.OS === 'web') {
+          // Cast window to any to bypass TypeScript errors
+          const win = window as any;
+          if (win && win.location) {
+            win.location.href = '/Login';
+          }
+          return;
+        }
+        
+        // For mobile, we'll use a simpler approach
+        console.log('Session cleared, app will redirect to login on next navigation');
+      }, 200);
+    }
+    
+    return true;
+  } catch (error) {
+    console.error('Error during logout:', error);
+    // Minimal fallback for errors
+    if (redirectToLogin && Platform.OS === 'web') {
+      setTimeout(() => {
+        // Cast window to any to bypass TypeScript errors
+        const win = window as any;
+        if (win && win.location) {
+          win.location.reload();
+        }
+      }, 200);
+    }
+    return false;
+  }
+};
+
 export default function RootLayout() {
   const colorScheme = useColorScheme();
   const [loaded] = useFonts({
@@ -536,20 +654,24 @@ export default function RootLayout() {
           const userRole = await AsyncStorage.getItem('userRole');
           
           if (userToken && userRole === 'user') {
-            console.log('App startup: Loading stored notifications');
+            console.log('App startup: Fetching notifications from server');
             
-            // First try to load from storage
             try {
-              const storedNotifications = await loadNotificationsFromStorage();
+              // Get notifications directly from the server API
+              const notificationsResponse = await fetchUserNotifications();
               
-              if (storedNotifications && storedNotifications.length > 0) {
-                console.log(`App startup: Found ${storedNotifications.length} stored notifications`);
-                store.dispatch(setNotifications(storedNotifications));
+              if (notificationsResponse.success && notificationsResponse.data && notificationsResponse.data.length > 0) {
+                console.log(`App startup: Fetched ${notificationsResponse.data.length} notifications from server`);
+                store.dispatch(setNotifications(notificationsResponse.data));
               } else {
-                console.log('App startup: No stored notifications found');
+                console.log('App startup: No notifications found on server');
+                // Initialize with empty array to mark as loaded
+                store.dispatch(setNotifications([]));
               }
-            } catch (storageError) {
-              console.error('App startup: Error loading notifications from storage:', storageError);
+            } catch (apiError) {
+              console.error('App startup: Error fetching notifications from server:', apiError);
+              // Initialize with empty array to mark as loaded
+              store.dispatch(setNotifications([]));
             }
           }
         } catch (error) {

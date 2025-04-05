@@ -249,7 +249,7 @@ router.delete('/:id', authenticateToken, async (req, res) => {
 router.post('/register-push-token', authenticateToken, async (req, res) => {
   try {
     const userId = req.user.id;
-    const { pushToken } = req.body;
+    const { pushToken, deviceInfo } = req.body;
 
     if (!pushToken) {
       return res.status(400).json({
@@ -258,19 +258,59 @@ router.post('/register-push-token', authenticateToken, async (req, res) => {
       });
     }
 
-    // Update the user with the new push token
-    const updatedUser = await User.findByIdAndUpdate(
-      userId,
-      { pushToken },
-      { new: true }
-    ).select('-password');
-
-    if (!updatedUser) {
+    // Get user
+    const user = await User.findById(userId);
+    if (!user) {
       return res.status(404).json({
         success: false,
         message: 'User not found'
       });
     }
+
+    // Check if addPushToken method exists
+    if (typeof user.addPushToken === 'function') {
+      // Use the method if it exists
+      user.addPushToken(pushToken, deviceInfo || 'unknown');
+    } else {
+      // Fallback implementation if the method doesn't exist
+      console.log('addPushToken method not found, using fallback implementation');
+      
+      // Initialize pushTokens array if it doesn't exist
+      if (!Array.isArray(user.pushTokens)) {
+        user.pushTokens = [];
+      }
+      
+      // Check if token already exists
+      const existingIndex = user.pushTokens.findIndex(
+        item => item && item.token === pushToken
+      );
+      
+      if (existingIndex !== -1) {
+        // Update existing token
+        user.pushTokens[existingIndex].lastUsed = new Date();
+        if (deviceInfo) {
+          user.pushTokens[existingIndex].device = deviceInfo;
+        }
+      } else {
+        // Add new token
+        user.pushTokens.push({
+          token: pushToken,
+          device: deviceInfo || 'unknown',
+          createdAt: new Date(),
+          lastUsed: new Date()
+        });
+      }
+    }
+    
+    // Handle old schema migration - if pushToken field exists
+    if (user.pushToken !== undefined) {
+      console.log('Found old pushToken field, consider migration to pushTokens array');
+      // Keep the old field updated too for backward compatibility
+      user.pushToken = pushToken;
+    }
+    
+    // Save the user with updated pushTokens
+    await user.save();
 
     console.log(`Push token registered for user ${userId}`);
 
@@ -283,6 +323,124 @@ router.post('/register-push-token', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to register push token',
+      error: error.message
+    });
+  }
+});
+
+// Remove push notification token
+router.delete('/remove-push-token', authenticateToken, async (req, res) => {
+  try {
+    const userId = req.user.id;
+    const { pushToken } = req.body;
+
+    if (!pushToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'Push token is required'
+      });
+    }
+
+    // Find user
+    const user = await User.findById(userId);
+    if (!user) {
+      return res.status(404).json({
+        success: false,
+        message: 'User not found'
+      });
+    }
+
+    // Store the original count to check if anything was removed
+    const originalCount = user.pushTokens ? user.pushTokens.length : 0;
+    
+    // Check if removePushToken method exists
+    if (typeof user.removePushToken === 'function') {
+      // Use the method if it exists
+      user.removePushToken(pushToken);
+    } else {
+      // Fallback implementation if the method doesn't exist
+      console.log('removePushToken method not found, using fallback implementation');
+      
+      // Initialize pushTokens array if it doesn't exist
+      if (!Array.isArray(user.pushTokens)) {
+        user.pushTokens = [];
+      } else {
+        // Filter out the token to remove
+        user.pushTokens = user.pushTokens.filter(
+          item => item && item.token !== pushToken
+        );
+      }
+    }
+    
+    // Handle old schema as well - if pushToken field exists
+    if (user.pushToken !== undefined && user.pushToken === pushToken) {
+      console.log('Found matching token in old pushToken field, clearing it');
+      user.pushToken = null;
+    }
+    
+    // Save the user with updated pushTokens
+    await user.save();
+    
+    const tokensRemoved = originalCount - (user.pushTokens ? user.pushTokens.length : 0);
+
+    console.log(`${tokensRemoved} push tokens removed for user ${userId}`);
+
+    res.json({
+      success: true,
+      message: `${tokensRemoved} push tokens removed successfully`
+    });
+  } catch (error) {
+    console.error('Error removing push token:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to remove push token',
+      error: error.message
+    });
+  }
+});
+
+// Remove stale tokens - tokens not used in the last 30 days
+router.post('/cleanup-push-tokens', authenticateToken, async (req, res) => {
+  try {
+    // Only admins can trigger manual cleanup
+    if (req.user.role !== 'admin') {
+      return res.status(403).json({
+        success: false,
+        message: 'Admin access required'
+      });
+    }
+
+    // Calculate date 30 days ago
+    const thirtyDaysAgo = new Date();
+    thirtyDaysAgo.setDate(thirtyDaysAgo.getDate() - 30);
+
+    // Find all users and update their push tokens
+    const users = await User.find({
+      'pushTokens.0': { $exists: true } // Users who have at least one push token
+    });
+
+    let totalRemoved = 0;
+    for (const user of users) {
+      const originalCount = user.pushTokens.length;
+      user.pushTokens = user.pushTokens.filter(token => 
+        token.lastUsed > thirtyDaysAgo
+      );
+      
+      if (user.pushTokens.length !== originalCount) {
+        await user.save();
+        totalRemoved += (originalCount - user.pushTokens.length);
+      }
+    }
+
+    res.json({
+      success: true,
+      message: `Removed ${totalRemoved} stale push tokens`
+    });
+  } catch (error) {
+    console.error('Error cleaning up push tokens:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to clean up push tokens',
       error: error.message
     });
   }

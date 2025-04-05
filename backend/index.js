@@ -25,6 +25,7 @@ const testRoutes = require('./apis/TestAPI'); // Import test routes
 const authenticateToken = require('./middleware/auth'); // ✅ Import auth middleware
 const { generateToken, blacklistToken, cleanupExpiredTokens } = require('./utils/tokenManager');
 const { uploadToCloudinary } = require('./utils/cloudinary');
+const { scheduleTokenCleanup } = require('./utils/scheduledTasks');
 
 // Initialize express
 const app = express();
@@ -122,6 +123,9 @@ const initDatabases = async () => {
 
 // Initialize databases before starting server
 initDatabases().then(() => {
+  // Setup scheduled cleanup tasks
+  scheduleTokenCleanup();
+  
   // ✅ Register route with image upload
   app.post('/api/register', upload.single('profilePicture'), async (req, res) => {
     try {
