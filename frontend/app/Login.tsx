@@ -14,7 +14,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage'; // ✅ Import AsyncStorage
 import { API_BASE_URL } from '@/env';
 import { registerPushTokenAfterLogin } from '@/utils/notificationHelper';
@@ -30,32 +30,40 @@ export default function LoginScreen() {
   // Animation for background studs
   const studAnimations = useRef([...Array(8)].map(() => new Animated.Value(0))).current;
 
-  useEffect(() => {
-    // ✅ Check if user is already logged in
-    const checkLoginStatus = async () => {
-      try {
-        const token = await AsyncStorage.getItem('userToken');
-        const role = await AsyncStorage.getItem('userRole');
+  // Check login status whenever screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      const checkLoginStatus = async () => {
+        try {
+          const token = await AsyncStorage.getItem('userToken');
+          const role = await AsyncStorage.getItem('userRole');
 
-        console.log('Login check - Token:', token ? 'exists' : 'missing');
-        console.log('Login check - Role:', role);
+          console.log('Login check - Token:', token ? 'exists' : 'missing');
+          console.log('Login check - Role:', role);
 
-        if (token) {
-          if (role === 'admin') {
-            console.log('Redirecting to admin dashboard');
-            router.replace('/admin/dashboard');
-          } else {
-            console.log('Redirecting to user home');
-            router.replace('/user/home');
+          if (token) {
+            if (role === 'admin') {
+              console.log('Redirecting to admin dashboard');
+              router.replace('/admin/dashboard');
+            } else {
+              console.log('Redirecting to user home');
+              router.replace('/user/home');
+            }
           }
+        } catch (error) {
+          console.error('Error checking login status:', error);
         }
-      } catch (error) {
-        console.error('Error checking login status:', error);
-      }
-    };
+      };
 
-    checkLoginStatus();
+      checkLoginStatus();
+      
+      return () => {
+        // Cleanup function when screen loses focus
+      };
+    }, [router])
+  );
 
+  useEffect(() => {
     // Animate background studs
     studAnimations.forEach((anim, i) => {
       Animated.loop(

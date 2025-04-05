@@ -18,7 +18,7 @@ import {
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { SafeAreaView } from 'react-native-safe-area-context';
 import { LinearGradient } from 'expo-linear-gradient';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 import { API_BASE_URL } from '@/env';
 import * as ImagePicker from 'expo-image-picker';
 
@@ -33,6 +33,26 @@ export default function RegisterScreen() {
   const [image, setImage] = useState<string | null>(null);
   const [isUploading, setIsUploading] = useState(false);
   const [buttonScale] = useState(new Animated.Value(1));
+  
+  // Add useFocusEffect to reset form or perform actions when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      // This code runs when the screen comes into focus
+      console.log('Register screen in focus');
+      
+      // You can reset form state or fetch initial data here
+      // For example, if you want to reset the form on focus:
+      // setUsername('');
+      // setEmail('');
+      // setPassword('');
+      // setImage(null);
+      
+      return () => {
+        // This code runs when the screen goes out of focus
+        console.log('Register screen lost focus');
+      };
+    }, [])
+  );
   
   // Animation for background studs
   const studAnimations = useRef([...Array(8)].map(() => new Animated.Value(0))).current;

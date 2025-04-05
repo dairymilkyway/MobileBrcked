@@ -12,6 +12,7 @@ import {
   Alert
 } from 'react-native';
 import { useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import UserHeader from '@/components/UserHeader';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import ProductCard from '@/components/ProductCard';
@@ -81,33 +82,42 @@ export default function Home() {
     setMaxPrice(storeMaxPrice);
   }, [storeSearchQuery, storeCategoryFilter, storeMinPrice, storeMaxPrice]);
 
-  useEffect(() => {
-    fetchProducts();
-    
-    // Register push token if not already done
-    const registerPushToken = async () => {
-      try {
-        // Only register for users with role 'user'
-        const userRole = await AsyncStorage.getItem('userRole');
-        if (userRole !== 'user') {
-          console.log(`Home screen: User has role '${userRole}', skipping push token registration`);
-          return;
+  // Use useFocusEffect instead of useEffect for data refresh when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      console.log('Home screen in focus, refreshing data...');
+      fetchProducts();
+      
+      // Register push token if not already done
+      const registerPushToken = async () => {
+        try {
+          // Only register for users with role 'user'
+          const userRole = await AsyncStorage.getItem('userRole');
+          if (userRole !== 'user') {
+            console.log(`Home screen: User has role '${userRole}', skipping push token registration`);
+            return;
+          }
+          
+          console.log('Home screen: Registering push notification token for user...');
+          const registered = await registerPushTokenAfterLogin();
+          if (registered) {
+            console.log('Home screen: Push notification token registered successfully');
+          } else {
+            console.warn('Home screen: Failed to register push notification token');
+          }
+        } catch (error) {
+          console.error('Home screen: Error registering push notification token:', error);
         }
-        
-        console.log('Home screen: Registering push notification token for user...');
-        const registered = await registerPushTokenAfterLogin();
-        if (registered) {
-          console.log('Home screen: Push notification token registered successfully');
-        } else {
-          console.warn('Home screen: Failed to register push notification token');
-        }
-      } catch (error) {
-        console.error('Home screen: Error registering push notification token:', error);
-      }
-    };
-    
-    registerPushToken();
-  }, []);
+      };
+      
+      registerPushToken();
+      
+      return () => {
+        // Cleanup function if needed
+        console.log('Home screen focus lost');
+      };
+    }, [])  // Empty dependency array means this runs on every focus
+  );
 
   // Add a new useEffect to handle combined filters
   useEffect(() => {

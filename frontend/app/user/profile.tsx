@@ -22,7 +22,7 @@ import { LinearGradient } from 'expo-linear-gradient';
 import { getUserProfile, updateUserProfile } from '@/utils/api';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import * as ImagePicker from 'expo-image-picker';
-import { useRouter } from 'expo-router';
+import { useRouter, useFocusEffect } from 'expo-router';
 
 const { width } = Dimensions.get('window');
 
@@ -104,30 +104,41 @@ export default function ProfileScreen() {
     }
   };
 
+  // Fetch user profile function
+  const fetchProfile = async () => {
+    try {
+      setIsLoading(true);
+      const userData = await getUserProfile();
+      
+      if (userData) {
+        setUser(userData);
+        setUsername(userData.username || '');
+        setEmail(userData.email || '');
+        setProfileImage(userData.profilePicture || null);
+      }
+      
+    } catch (error) {
+      console.error('Error fetching profile:', error);
+      Alert.alert('Error', 'Failed to load profile. Please try again.');
+    } finally {
+      setIsLoading(false);
+    }
+  };
+
   // Fetch user profile when the component mounts
   useEffect(() => {
-    const fetchProfile = async () => {
-      try {
-        setIsLoading(true);
-        const userData = await getUserProfile();
-        
-        if (userData) {
-          setUser(userData);
-          setUsername(userData.username || '');
-          setEmail(userData.email || '');
-          setProfileImage(userData.profilePicture || null);
-        }
-        
-      } catch (error) {
-        console.error('Error fetching profile:', error);
-        Alert.alert('Error', 'Failed to load profile. Please try again.');
-      } finally {
-        setIsLoading(false);
-      }
-    };
-
     fetchProfile();
   }, []);
+
+  // Refresh profile data when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchProfile();
+      return () => {
+        // Clean up if needed
+      };
+    }, [])
+  );
 
   const toggleEditMode = () => {
     setIsEditMode(!isEditMode);
@@ -893,4 +904,4 @@ const styles = StyleSheet.create({
     transform: [{ rotate: '25deg' }],
     zIndex: -1,
   },
-}); 
+});

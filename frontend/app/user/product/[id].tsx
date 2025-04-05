@@ -1,4 +1,4 @@
-import React, { useState, useEffect, useRef } from 'react';
+import React, { useState, useEffect, useRef, useCallback } from 'react';
 import {
   View,
   Text,
@@ -13,7 +13,7 @@ import {
   Modal,
   Animated
 } from 'react-native';
-import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useLocalSearchParams, useRouter, useFocusEffect } from 'expo-router';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import { API_BASE_URL } from '@/env';
 import UserHeader from '@/components/UserHeader';
@@ -53,18 +53,30 @@ export default function ProductDetail() {
   // Sample images for demonstration - in real implementation, these would come from the product data
   const [productImages, setProductImages] = useState<string[]>([]);
   
+  // Use useFocusEffect to refresh product data when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      if (id) {
+        // Fetch product details using Redux action
+        dispatch(fetchProductDetail(id.toString()));
+        fetchProductRatings();
+      }
+      
+      // Clean up on screen blur or component unmount
+      return () => {
+        // No need to clear selected product on blur
+        // as we might want to keep the data in memory
+      };
+    }, [id, dispatch])
+  );
+  
+  // Keep the useEffect for initial load and cleanup
   useEffect(() => {
-    if (id) {
-      // Fetch product details using Redux action
-      dispatch(fetchProductDetail(id.toString()));
-      fetchProductRatings();
-    }
-    
     // Clean up on component unmount
     return () => {
       dispatch(clearSelectedProduct());
     };
-  }, [id, dispatch]);
+  }, [dispatch]);
   
   useEffect(() => {
     // If product is loaded, initialize the image array

@@ -1,9 +1,9 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { View, Text, StyleSheet, FlatList, Image, TouchableOpacity, SafeAreaView, Platform, ActivityIndicator, Alert } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserHeader from '@/components/UserHeader';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { API_BASE_URL } from '@/env';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
@@ -47,10 +47,17 @@ export default function CartScreen() {
     });
   }, [navigation]);
   
-  // Fetch cart items when component mounts
-  useEffect(() => {
-    fetchCartItems();
-  }, []);
+  // Replace useEffect with useFocusEffect to refresh cart data whenever screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      fetchCartItems();
+      
+      // Return a cleanup function if needed
+      return () => {
+        // Optional cleanup code
+      };
+    }, [])
+  );
   
   const fetchCartItems = async () => {
     try {
@@ -355,68 +362,72 @@ export default function CartScreen() {
         </View>
         
         <View style={styles.cartItem}>
-          <TouchableOpacity 
-            style={styles.checkboxContainer}
-            onPress={() => toggleItemSelection(item.id)}
-          >
-            <View style={[
-              styles.checkbox,
-              item.selected && styles.checkboxSelected
-            ]}>
-              {item.selected && (
-                <MaterialCommunityIcons 
-                  name="check" 
-                  size={16} 
-                  color="#FFFFFF" 
-                />
-              )}
-            </View>
-          </TouchableOpacity>
-          
-          <Image 
-            source={{ uri: item.imageURL || 'https://via.placeholder.com/300' }} 
-            style={styles.itemImage} 
-          />
-          
+          {/* Product name and price at the same level */}
           <View style={styles.itemDetails}>
-            <Text style={styles.itemName}>{item.productName}</Text>
+            <Text style={styles.itemName} numberOfLines={2} ellipsizeMode="tail">{item.productName}</Text>
             <Text style={styles.itemPrice}>₱{item.price.toFixed(2)}</Text>
           </View>
           
-          <View style={styles.quantityContainer}>
-            {hasStockError && (
-              <Text style={styles.stockErrorText}>{hasStockError}</Text>
-            )}
+          {/* Checkbox, image, and quantity in a row */}
+          <View style={styles.itemContentRow}>
+            <TouchableOpacity 
+              style={styles.checkboxContainer}
+              onPress={() => toggleItemSelection(item.id)}
+            >
+              <View style={[
+                styles.checkbox,
+                item.selected && styles.checkboxSelected
+              ]}>
+                {item.selected && (
+                  <MaterialCommunityIcons 
+                    name="check" 
+                    size={16} 
+                    color="#FFFFFF" 
+                  />
+                )}
+              </View>
+            </TouchableOpacity>
             
-            <View style={styles.quantityControls}>
-              <TouchableOpacity 
-                style={styles.quantityButton}
-                onPress={() => updateQuantity(item.id, -1)}
-              >
-                <MaterialCommunityIcons name="minus" size={18} color="#FFFFFF" />
-                <View style={styles.buttonStud} />
-              </TouchableOpacity>
+            <Image 
+              source={{ uri: item.imageURL || 'https://via.placeholder.com/300' }} 
+              style={styles.itemImage} 
+            />
+            
+            <View style={styles.quantityContainerShifted}>
+              {hasStockError && (
+                <Text style={styles.stockErrorText}>{hasStockError}</Text>
+              )}
               
-              <Text style={styles.quantityText}>{item.quantity}</Text>
+              <View style={styles.quantityControls}>
+                <TouchableOpacity 
+                  style={styles.quantityButton}
+                  onPress={() => updateQuantity(item.id, -1)}
+                >
+                  <MaterialCommunityIcons name="minus" size={18} color="#FFFFFF" />
+                  <View style={styles.buttonStud} />
+                </TouchableOpacity>
+                
+                <Text style={styles.quantityText}>{item.quantity}</Text>
+                
+                <TouchableOpacity 
+                  style={[
+                    styles.quantityButton, 
+                    { backgroundColor: isAtStockLimit ? '#CCCCCC' : '#4CAF50' }
+                  ]}
+                  disabled={isAtStockLimit}
+                  onPress={() => updateQuantity(item.id, 1)}
+                >
+                  <MaterialCommunityIcons name="plus" size={18} color="#FFFFFF" />
+                  <View style={styles.buttonStud} />
+                </TouchableOpacity>
+              </View>
               
-              <TouchableOpacity 
-                style={[
-                  styles.quantityButton, 
-                  { backgroundColor: isAtStockLimit ? '#CCCCCC' : '#4CAF50' }
-                ]}
-                disabled={isAtStockLimit}
-                onPress={() => updateQuantity(item.id, 1)}
-              >
-                <MaterialCommunityIcons name="plus" size={18} color="#FFFFFF" />
-                <View style={styles.buttonStud} />
-              </TouchableOpacity>
+              {stock !== undefined && (
+                <Text style={styles.stockInfoText}>
+                  {stock === 0 ? 'Out of stock' : `${stock} in stock`}
+                </Text>
+              )}
             </View>
-            
-            {stock !== undefined && (
-              <Text style={styles.stockInfoText}>
-                {stock === 0 ? 'Out of stock' : `${stock} in stock`}
-              </Text>
-            )}
           </View>
         </View>
       </View>
@@ -577,9 +588,13 @@ const styles = StyleSheet.create({
     backgroundColor: '#FFBD00',
   },
   cartItem: {
-    flexDirection: 'row',
     padding: 12,
+    flexDirection: 'column', // Changed from 'row' to 'column'
+  },
+  itemContentRow: {
+    flexDirection: 'row',
     alignItems: 'center',
+    marginTop: 10, // Add space between product name and the content row
   },
   itemImage: {
     width: 70,
@@ -590,14 +605,19 @@ const styles = StyleSheet.create({
     borderColor: '#DDDDDD',
   },
   itemDetails: {
-    flex: 1,
-    marginRight: 8,
+    marginBottom: 8, // Add spacing below the product info
+    width: '100%', // Take up full width
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    alignItems: 'center',
   },
   itemName: {
-    fontSize: 16,
+    fontSize: 18, // Slightly larger as it's now a main header
     fontWeight: 'bold',
     marginBottom: 4,
     color: '#0C0A00',
+    flex: 1,
+    paddingRight: 10,
   },
   itemPrice: {
     fontSize: 16,
@@ -606,6 +626,11 @@ const styles = StyleSheet.create({
   },
   quantityContainer: {
     alignItems: 'center',
+  },
+  quantityContainerShifted: {
+    alignItems: 'center',
+    marginLeft: 'auto', // This pushes the quantity controls to the right
+    paddingRight: 5,
   },
   quantityControls: {
     flexDirection: 'row',

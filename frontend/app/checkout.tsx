@@ -15,7 +15,7 @@ import {
 import { StatusBar } from 'expo-status-bar';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserHeader from '@/components/UserHeader';
-import { useNavigation } from '@react-navigation/native';
+import { useNavigation, useFocusEffect } from '@react-navigation/native';
 import { API_BASE_URL } from '@/env';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
@@ -92,12 +92,21 @@ export default function CheckoutScreen() {
     navigation.setOptions({
       headerShown: false,
     });
-    
-    // Fetch cart items when component mounts
-    fetchCartItems();
-    // Fetch user profile when component mounts
-    fetchUserProfile();
   }, [navigation]);
+
+  // Use useFocusEffect to fetch cart items and user profile when screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      // Fetch cart items when component comes into focus
+      fetchCartItems();
+      // Fetch user profile when component comes into focus
+      fetchUserProfile();
+      
+      return () => {
+        // Any cleanup code if needed
+      };
+    }, [])
+  );
 
   // Fetch user profile to get email
   const fetchUserProfile = async () => {

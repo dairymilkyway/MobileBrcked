@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from 'react';
+import React, { useState, useEffect, useCallback } from 'react';
 import { 
   View, 
   Text, 
@@ -14,6 +14,7 @@ import { StatusBar } from 'expo-status-bar';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserHeader from '@/components/UserHeader';
 import { useNavigation } from '@react-navigation/native';
+import { useFocusEffect } from '@react-navigation/native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { API_BASE_URL } from '@/env';
 
@@ -58,11 +59,15 @@ export default function OrdersScreen() {
     navigation.setOptions({
       headerShown: false,
     });
-    
-    // Load orders when component mounts
-    loadOrders();
   }, [navigation]);
-
+  
+  // Load orders when screen comes into focus
+  useFocusEffect(
+    useCallback(() => {
+      loadOrders();
+    }, [])
+  );
+  
   const loadOrders = async () => {
     try {
       setLoading(true);
@@ -623,4 +628,4 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#E3000B',
   },
-}); 
+});

@@ -16,6 +16,7 @@ import {
   Keyboard
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
+import { useFocusEffect } from '@react-navigation/native';
 import { AntDesign } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserHeader from '@/components/UserHeader';
@@ -56,6 +57,17 @@ export default function ProductReviews() {
     fetchReviews();
     fetchProductInfo();
   }, [id]);
+  
+  // Add useFocusEffect to refresh data when the screen comes into focus
+  useFocusEffect(
+    React.useCallback(() => {
+      fetchReviews();
+      fetchProductInfo();
+      return () => {
+        // Clean up if needed
+      };
+    }, [id])
+  );
 
   const fetchReviews = async () => {
     if (!id) return;
