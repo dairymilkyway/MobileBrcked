@@ -171,7 +171,7 @@ export default function UserHeader({ section = 'Home', compact = false }) {
                 <View style={styles.buttonStud} />
               </View>
             </>
-          ) : null}
+          )}
           
           {/* Orders Button */}
           <TouchableOpacity 

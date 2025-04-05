@@ -16,12 +16,16 @@ import UserHeader from '@/components/UserHeader';
 import { IconSymbol } from '@/components/ui/IconSymbol';
 import ProductCard from '@/components/ProductCard';
 import { API_BASE_URL } from '@/env';
-import { registerPushTokenAfterLogin, forceRegisterPushToken } from '@/utils/notificationHelper';
+import { registerPushTokenAfterLogin } from '@/utils/notificationHelper';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-import Constants from 'expo-constants';
-
-// Request timeout in milliseconds
-const FETCH_TIMEOUT = 10000;
+import { useAppDispatch, useAppSelector } from '@/redux/hooks';
+import { 
+  searchFilterProducts, 
+  setSearchQuery as setStoreSearchQuery, 
+  setCategoryFilter as setStoreCategoryFilter,
+  setPriceRange as setStorePriceRange,
+  clearFilters as clearStoreFilters
+} from '@/redux/slices/productSlice';
 
 // LEGO brand colors
 const LEGO_COLORS = {
@@ -44,44 +48,38 @@ const LEGO_SHADOW = {
   elevation: 5,
 };
 
-interface Product {
-  _id: string;
-  name: string;
-  price: number;
-  imageURL: string[];
-  pieces: number;
-  category: string;
-  description: string;
-  stock: number;
-}
-
-// API response interface to match our backend format
-interface ApiResponse {
-  success: boolean;
-  count: number;
-  total: number;
-  totalPages: number;
-  currentPage: number;
-  data: Product[];
-  message?: string; // Optional message property
-}
-
 export default function Home() {
   const router = useRouter();
+  const dispatch = useAppDispatch();
+  
+  // Get state from Redux store
+  const { 
+    items: products, 
+    loading, 
+    error, 
+    searchQuery: storeSearchQuery,
+    categoryFilter: storeCategoryFilter,
+    minPrice: storeMinPrice,
+    maxPrice: storeMaxPrice
+  } = useAppSelector(state => state.products);
+  
+  // Local UI state
   const [searchQuery, setSearchQuery] = useState('');
-  const [products, setProducts] = useState<Product[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
   const [currentCategory, setCurrentCategory] = useState<string | null>(null);
-  // Add price range state variables
   const [minPrice, setMinPrice] = useState<number | null>(null);
   const [maxPrice, setMaxPrice] = useState<number | null>(null);
   const [showPriceFilter, setShowPriceFilter] = useState(false);
-  // Add state variable to track if filters have been applied
   const [filtersApplied, setFiltersApplied] = useState(false);
-  // Add state for custom price range inputs
   const [customMinPrice, setCustomMinPrice] = useState<string>('');
   const [customMaxPrice, setCustomMaxPrice] = useState<string>('');
+
+  // Sync local state with Redux state on mount
+  useEffect(() => {
+    setSearchQuery(storeSearchQuery || '');
+    setCurrentCategory(storeCategoryFilter);
+    setMinPrice(storeMinPrice);
+    setMaxPrice(storeMaxPrice);
+  }, [storeSearchQuery, storeCategoryFilter, storeMinPrice, storeMaxPrice]);
 
   useEffect(() => {
     fetchProducts();
@@ -119,172 +117,65 @@ export default function Home() {
     }
   }, [filtersApplied]);
 
-  const fetchWithTimeout = async (url: string, options = {}) => {
-    const controller = new AbortController();
-    const { signal } = controller;
-    
-    const timeout = setTimeout(() => {
-      controller.abort();
-    }, FETCH_TIMEOUT);
-    
-    try {
-      const response = await fetch(url, { ...options, signal });
-      clearTimeout(timeout);
-      return response;
-    } catch (error) {
-      clearTimeout(timeout);
-      throw error;
-    }
-  };
-
   const fetchProducts = async () => {
-    try {
-      setLoading(true);
-      setCurrentCategory(null);
-      setMinPrice(null);
-      setMaxPrice(null);
-      
-      // Add limit parameter to get all products (adjust higher than your total count)
-      console.log(`Fetching products from: ${API_BASE_URL}/products?limit=50`);
-      const response = await fetchWithTimeout(`${API_BASE_URL}/products?limit=50`);
-
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.message || `Server responded with status: ${response.status}`
-        );
-      }
-      
-      const responseData: ApiResponse = await response.json();
-      console.log(`Received ${responseData.data?.length || 0} total products from API`);
-      
-      if (responseData.success) {
-        // Make sure all products are being set to state
-        setProducts(responseData.data || []);
-        setError(null);
-      } else {
-        throw new Error(responseData.message || 'Failed to fetch products');
-      }
-    } catch (err: any) {
-      console.error('Error fetching products:', err);
-      if (err.name === 'AbortError') {
-        setError('Request timed out. Please check your connection and try again.');
-      } else if (err.message.includes('Network request failed')) {
-        setError('Network error. Please check your connection and server status.');
-      } else {
-        setError(`Error loading products: ${err.message}`);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleSearch = async () => {
-    try {
-      setLoading(true);
-      
-      // Build the URL with filters
-      let apiUrl = `${API_BASE_URL}/products`;
-      const queryParams = new URLSearchParams();
-      
-      // Set limit parameter
-      queryParams.append('limit', '50');
-      
-      // Add category filter if present
-      if (currentCategory) {
-        queryParams.append('category', currentCategory);
-        console.log(`Applying category filter: ${currentCategory}`);
-      }
-      
-      // Add price range if present
-      if (minPrice !== null) {
-        queryParams.append('minPrice', minPrice.toString());
-        console.log(`Applying min price filter: ₱${minPrice}`);
-      }
-      
-      if (maxPrice !== null) {
-        queryParams.append('maxPrice', maxPrice.toString());
-        console.log(`Applying max price filter: ₱${maxPrice}`);
-      }
-      
-      // Add search query if present
-      if (searchQuery.trim()) {
-        apiUrl += `/search/${encodeURIComponent(searchQuery)}`;
-        console.log(`Applying search query: "${searchQuery}"`);
-      }
-      
-      // Combine URL and query parameters
-      apiUrl += `?${queryParams.toString()}`;
-      
-      console.log(`Searching products with filters from: ${apiUrl}`);
-      
-      const response = await fetchWithTimeout(apiUrl);
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.message || `Server responded with status: ${response.status}`
-        );
-      }
-      
-      const responseData: ApiResponse = await response.json();
-      console.log(`Search found ${responseData.data?.length || 0} products`);
-      
-      if (responseData.success) {
-        // Filter the results client-side to ensure they match all criteria
-        // This is a safety measure in case the backend API doesn't filter correctly
-        let filteredProducts = responseData.data || [];
-        
-        // Apply client-side category filter if needed
-        if (currentCategory) {
-          filteredProducts = filteredProducts.filter(p => 
-            p.category === currentCategory
-          );
-          console.log(`After client-side category filter: ${filteredProducts.length} products`);
-        }
-        
-        // Apply client-side price filter if needed
-        if (minPrice !== null || maxPrice !== null) {
-          filteredProducts = filteredProducts.filter(p => {
-            const price = p.price;
-            const passesMinPrice = minPrice === null || price >= minPrice;
-            const passesMaxPrice = maxPrice === null || price <= maxPrice;
-            return passesMinPrice && passesMaxPrice;
-          });
-          console.log(`After client-side price filter: ${filteredProducts.length} products`);
-        }
-        
-        setProducts(filteredProducts);
-        setError(null);
-      } else {
-        throw new Error(responseData.message || 'Failed to search products');
-      }
-    } catch (err: any) {
-      console.error('Error searching products:', err);
-      if (err.name === 'AbortError') {
-        setError('Search request timed out. Please try again.');
-      } else if (err.message.includes('Network request failed')) {
-        setError('Network error. Please check your connection and server status.');
-      } else {
-        setError(`Error searching products: ${err.message}`);
-      }
-    } finally {
-      setLoading(false);
-    }
-  };
-
-  const handleCategoryFilter = (category: string) => {
-    // Toggle category selection - if already selected, clear it
-    if (currentCategory === category) {
-      setCurrentCategory(null);
-    } else {
-      setCurrentCategory(category);
-    }
+    console.log('fetchProducts called, resetting all filters');
     
-    // Delay applying filters to ensure state is updated
+    // Reset local state first
+    setSearchQuery('');
+    setCurrentCategory(null);
+    setMinPrice(null);
+    setMaxPrice(null);
+    
+    // Then update Redux store
+    dispatch(clearStoreFilters());
+    
+    // Fetch all products using Redux action
+    dispatch(searchFilterProducts({ limit: 50 }));
+  };
+
+  // Update the search handler to ensure it works with categories
+  const handleSearch = async () => {
+    console.log('Search initiated with:');
+    console.log('- Search query:', searchQuery);
+    console.log('- Category:', currentCategory);
+    console.log('- Price range:', minPrice, maxPrice);
+    
+    // Update Redux store with current filters
+    dispatch(setStoreSearchQuery(searchQuery));
+    dispatch(setStoreCategoryFilter(currentCategory));
+    dispatch(setStorePriceRange({ min: minPrice, max: maxPrice }));
+    
+    // Use Redux action to search with filters
+    dispatch(searchFilterProducts({
+      query: searchQuery,
+      category: currentCategory,
+      minPrice,
+      maxPrice,
+      limit: 50
+    }));
+  };
+
+  // Modify the category filter function to maintain search query
+  const handleCategoryFilter = (category: string) => {
+    console.log(`Changing category filter: ${category}, current: ${currentCategory}`);
+    
+    // Toggle category selection - if already selected, clear it
+    const newCategory = currentCategory === category ? null : category;
+    setCurrentCategory(newCategory);
+    
+    // Update Redux store immediately
+    dispatch(setStoreCategoryFilter(newCategory));
+    
+    // Execute search with current search query and updated category
     setTimeout(() => {
-      setFiltersApplied(true);
-    }, 10); // Slightly longer timeout to ensure state updates
+      dispatch(searchFilterProducts({
+        query: searchQuery, // Keep the current search query
+        category: newCategory,
+        minPrice: minPrice,
+        maxPrice: maxPrice,
+        limit: 50
+      }));
+    }, 50);
   };
 
   // Add price range handling function
@@ -332,10 +223,16 @@ export default function Home() {
   };
 
   const handleResetFilters = () => {
+    // Reset Redux store
+    dispatch(clearStoreFilters());
+    
+    // Reset local state
     setSearchQuery('');
     setCurrentCategory(null);
     setMinPrice(null);
     setMaxPrice(null);
+    
+    // Fetch all products
     fetchProducts();
   };
 
@@ -360,6 +257,7 @@ export default function Home() {
     fetchProducts();
   };
 
+  // Update the search bar component to display currently active filters
   return (
     <View style={styles.container}>
       <UserHeader section="Home" />
@@ -369,7 +267,7 @@ export default function Home() {
           <View style={styles.searchInputContainer}>
             <TextInput
               style={styles.searchInput}
-              placeholder="Search LEGO sets"
+              placeholder={currentCategory ? `Search in ${currentCategory}s` : "Search LEGO sets"}
               value={searchQuery}
               onChangeText={setSearchQuery}
               onSubmitEditing={handleSearch}
@@ -414,7 +312,21 @@ export default function Home() {
                 styles.categoryButton, 
                 currentCategory === null && styles.categoryButtonActive
               ]}
-              onPress={() => fetchProducts()}
+              onPress={() => {
+                console.log('All categories selected');
+                // Reset just the category filter but KEEP search query
+                setCurrentCategory(null);
+                dispatch(setStoreCategoryFilter(null));
+                
+                // Perform search with updated filters but keep search query
+                dispatch(searchFilterProducts({
+                  query: searchQuery, // Keep current search!
+                  category: null,
+                  minPrice: minPrice,
+                  maxPrice: maxPrice,
+                  limit: 50
+                }));
+              }}
             >
               <Text style={[
                 styles.categoryText, 
@@ -616,9 +528,10 @@ export default function Home() {
               {(minPrice !== null || maxPrice !== null) ? ` (${getPriceRangeText()})` : ''}
             </Text>
             
-            {!loading && !error && products.length > 0 && (
+            {!loading && !error && (
               <Text style={styles.productCount}>
                 Showing {products.length} products
+                {currentCategory ? ` in category "${currentCategory}"` : ''}
               </Text>
             )}
           </View>

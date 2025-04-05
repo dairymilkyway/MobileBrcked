@@ -18,6 +18,9 @@ import UserHeader from '@/components/UserHeader';
 import { useNavigation } from '@react-navigation/native';
 import { API_BASE_URL } from '@/env';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useAppDispatch, useAppSelector } from '@/redux/hooks';
+import { createOrder, resetOrderState } from '@/redux/slices/orderSlices';
+import { ShippingDetails, Order } from '@/redux/slices/orderSlices';
 
 type PaymentMethod = 'gcash' | 'cod' | 'credit_card';
 
@@ -29,7 +32,7 @@ interface CartItem {
   price: number;
   quantity: number;
   imageURL: string | null;
-  selected?: boolean; // Added selected property for checkout
+  selected?: boolean;
 }
 
 // Type for the API response
@@ -39,30 +42,12 @@ interface ApiResponse<T> {
   message?: string;
 }
 
-// Order details interface
-interface OrderDetails {
-  orderId: string;
-  orderDate: string;
-  items: CartItem[];
-  shippingDetails: {
-    name: string;
-    email: string;
-    phone: string;
-    address: string;
-    city: string;
-    postalCode: string;
-  };
-  paymentMethod: PaymentMethod;
-  subtotal: number;
-  shipping: number;
-  tax: number;
-  total: number;
-  status: 'pending' | 'processing' | 'shipped' | 'delivered';
-}
-
 export default function CheckoutScreen() {
   const navigation = useNavigation();
-  const [formData, setFormData] = useState({
+  const dispatch = useAppDispatch();
+  const { loading, error, success, selectedOrder } = useAppSelector(state => state.orders);
+  
+  const [formData, setFormData] = useState<ShippingDetails>({
     name: '',
     email: '',
     address: '',
@@ -72,13 +57,35 @@ export default function CheckoutScreen() {
   });
   const [paymentMethod, setPaymentMethod] = useState<PaymentMethod>('cod');
   const [cartItems, setCartItems] = useState<CartItem[]>([]);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [isProcessingOrder, setIsProcessingOrder] = useState(false);
+  const [fetchingCartItems, setFetchingCartItems] = useState(true);
+  const [cartError, setCartError] = useState<string | null>(null);
   
   // Constants for order calculations
   const SHIPPING_FEE = 150;
   const TAX_RATE = 0.12; // 12% tax
+  
+  // Reset order state when component unmounts
+  useEffect(() => {
+    return () => {
+      dispatch(resetOrderState());
+    };
+  }, []);
+  
+  // Navigate to order confirmation when order is created successfully
+  useEffect(() => {
+    if (success && selectedOrder) {
+      // Navigate to order confirmation page with orderId
+      // @ts-ignore - Navigation typing issue
+      navigation.navigate('order-confirmation', { orderId: selectedOrder.orderId });
+    }
+  }, [success, selectedOrder]);
+  
+  // Display error message if order creation fails
+  useEffect(() => {
+    if (error) {
+      Alert.alert('Order Error', error);
+    }
+  }, [error]);
   
   // Hide the default header
   useEffect(() => {
@@ -146,14 +153,14 @@ export default function CheckoutScreen() {
 
   const fetchCartItems = async () => {
     try {
-      setLoading(true);
+      setFetchingCartItems(true);
       
       // Get token from AsyncStorage
       const token = await AsyncStorage.getItem('token');
       
       if (!token) {
-        setError('You need to login to checkout');
-        setLoading(false);
+        setCartError('You need to login to checkout');
+        setFetchingCartItems(false);
         return;
       }
       
@@ -196,21 +203,21 @@ export default function CheckoutScreen() {
           });
         
         if (processedItems.length === 0) {
-          setError('No items selected for checkout. Please select items in your cart.');
-          setLoading(false);
+          setCartError('No items selected for checkout. Please select items in your cart.');
+          setFetchingCartItems(false);
           return;
         }
         
         setCartItems(processedItems);
-        setError(null);
+        setCartError(null);
       } else {
-        setError(data.message || 'Failed to fetch cart items');
+        setCartError(data.message || 'Failed to fetch cart items');
       }
     } catch (error) {
       console.error('Error fetching cart for checkout:', error);
-      setError('Error loading cart. Please try again.');
+      setCartError('Error loading cart. Please try again.');
     } finally {
-      setLoading(false);
+      setFetchingCartItems(false);
     }
   };
 
@@ -221,84 +228,19 @@ export default function CheckoutScreen() {
     });
   };
 
-  const clearCart = async () => {
-    try {
-      const token = await AsyncStorage.getItem('token');
-      
-      if (!token) {
-        console.error('No token available to clear cart');
-        return false;
-      }
-      
-      const response = await fetch(`${API_BASE_URL}/cart/clear`, {
-        method: 'DELETE',
-        headers: {
-          'Authorization': `Bearer ${token}`
-        }
-      });
-      
-      if (!response.ok) {
-        console.error('Failed to clear cart:', response.status);
-        return false;
-      }
-      
-      const data = await response.json();
-      return data.success;
-    } catch (error) {
-      console.error('Error clearing cart:', error);
-      return false;
-    }
+  // Calculate subtotal
+  const calculateSubtotal = () => {
+    return cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
   };
   
-  const saveOrderToStorage = async (order: OrderDetails) => {
-    try {
-      // Get token from AsyncStorage
-      const token = await AsyncStorage.getItem('token');
-      
-      if (!token) {
-        console.error('No token available to save order');
-        return false;
-      }
-      
-      // Send the order to the backend API
-      const response = await fetch(`${API_BASE_URL}/orders/create`, {
-        method: 'POST',
-        headers: {
-          'Authorization': `Bearer ${token}`,
-          'Content-Type': 'application/json'
-        },
-        body: JSON.stringify(order)
-      });
-      
-      if (!response.ok) {
-        console.error('Failed to create order:', response.status);
-        return false;
-      }
-      
-      const data = await response.json();
-      
-      if (!data.success) {
-        console.error('API returned success: false for order creation');
-        return false;
-      }
-      
-      // Also save locally for immediate access
-      const ordersJson = await AsyncStorage.getItem('userOrders');
-      let orders: OrderDetails[] = [];
-      
-      if (ordersJson) {
-        orders = JSON.parse(ordersJson);
-      }
-      
-      // Add new order to local storage
-      orders.push(order);
-      await AsyncStorage.setItem('userOrders', JSON.stringify(orders));
-      
-      return true;
-    } catch (error) {
-      console.error('Error saving order:', error);
-      return false;
-    }
+  // Calculate tax
+  const calculateTax = () => {
+    return calculateSubtotal() * TAX_RATE;
+  };
+  
+  // Calculate total
+  const calculateTotal = () => {
+    return calculateSubtotal() + SHIPPING_FEE + calculateTax();
   };
 
   const handleSubmit = async () => {
@@ -317,80 +259,37 @@ export default function CheckoutScreen() {
       return;
     }
     
-    setIsProcessingOrder(true);
-    
     try {
-      // Create order details
+      // Create order using Redux
       const orderId = `ORD-${Date.now()}-${Math.floor(Math.random() * 1000)}`;
       
-      // Ensure orderDate is properly formatted ISO string
-      const now = new Date();
-      const orderDate = now.toISOString();
-      console.log('Created orderDate:', orderDate);
-      
-      const order: OrderDetails = {
+      // Create the order object
+      const orderData: Omit<Order, '_id'> = {
         orderId,
-        orderDate,
         items: [...cartItems],
-        shippingDetails: {
-          name: formData.name,
-          email: formData.email,
-          phone: formData.phone,
-          address: formData.address,
-          city: formData.city,
-          postalCode: formData.postalCode
-        },
+        shippingDetails: formData,
         paymentMethod,
         subtotal: calculateSubtotal(),
         shipping: SHIPPING_FEE,
         tax: calculateTax(),
         total: calculateTotal(),
-        status: 'pending'
+        status: 'pending',
+        createdAt: new Date().toISOString(),
       };
       
-      console.log('Order being sent:', JSON.stringify({
-        orderId: order.orderId,
-        orderDate: order.orderDate
-      }));
+      // Dispatch the create order action
+      dispatch(createOrder(orderData));
       
-      // Save order to API and storage
-      const saveResult = await saveOrderToStorage(order);
-      
-      if (!saveResult) {
-        throw new Error('Failed to save order information');
-      }
-      
-      // The backend API will clear the cart items that are in the order
-      // But we'll also clear the selected items state from AsyncStorage
+      // Clear selected items from AsyncStorage
       await AsyncStorage.removeItem('selectedCartItems');
       
-      // Navigate to order confirmation page with orderId
-      // @ts-ignore - Navigation typing issue
-      navigation.navigate('order-confirmation', { orderId });
     } catch (error) {
-      console.error('Error processing order:', error);
+      console.error('Error preparing order:', error);
       Alert.alert(
         'Order Error',
-        'There was a problem processing your order. Please try again.'
+        'There was a problem preparing your order. Please try again.'
       );
-    } finally {
-      setIsProcessingOrder(false);
     }
-  };
-  
-  // Calculate subtotal
-  const calculateSubtotal = () => {
-    return cartItems.reduce((sum, item) => sum + (item.price * item.quantity), 0);
-  };
-  
-  // Calculate tax
-  const calculateTax = () => {
-    return calculateSubtotal() * TAX_RATE;
-  };
-  
-  // Calculate total
-  const calculateTotal = () => {
-    return calculateSubtotal() + SHIPPING_FEE + calculateTax();
   };
 
   return (
@@ -492,13 +391,13 @@ export default function CheckoutScreen() {
           <View style={styles.sectionContent}>
             <Text style={styles.sectionTitle}>Order Summary</Text>
             
-            {loading ? (
+            {fetchingCartItems ? (
               <View style={styles.loadingContainer}>
                 <ActivityIndicator size="small" color="#E3000B" />
                 <Text style={styles.loadingText}>Loading your cart...</Text>
               </View>
-            ) : error ? (
-              <Text style={styles.errorText}>{error}</Text>
+            ) : cartError ? (
+              <Text style={styles.errorText}>{cartError}</Text>
             ) : cartItems.length === 0 ? (
               <Text style={styles.emptyCartText}>Your cart is empty</Text>
             ) : (
@@ -632,18 +531,18 @@ export default function CheckoutScreen() {
           <TouchableOpacity 
             style={styles.backButton}
             onPress={() => navigation.goBack()}
-            disabled={isProcessingOrder}
+            disabled={loading}
           >
             <Text style={styles.backButtonText}>BACK</Text>
             <View style={styles.backButtonBottom} />
           </TouchableOpacity>
           
           <TouchableOpacity 
-            style={[styles.placeOrderButton, isProcessingOrder && styles.disabledButton]}
+            style={[styles.placeOrderButton, loading && styles.disabledButton]}
             onPress={handleSubmit}
-            disabled={isProcessingOrder}
+            disabled={loading || fetchingCartItems}
           >
-            {isProcessingOrder ? (
+            {loading ? (
               <ActivityIndicator size="small" color="#FFFFFF" />
             ) : (
               <Text style={styles.placeOrderText}>PLACE ORDER</Text>

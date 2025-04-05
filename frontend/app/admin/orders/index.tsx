@@ -1,41 +1,9 @@
 import React, { useState, useEffect } from 'react';
 import { View, Text, StyleSheet, Platform, FlatList, TouchableOpacity, SafeAreaView, StatusBar, Alert, Modal, Image } from 'react-native';
 import { Ionicons } from '@expo/vector-icons';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '@/env';
-import axios from 'axios';
 import * as Notifications from 'expo-notifications';
-
-// Define order type
-interface Order {
-  _id: string;
-  orderId: string;
-  userId: string;
-  items: {
-    productId: string;
-    productName: string;
-    quantity: number;
-    price: number;
-    imageURL?: string;
-  }[];
-  shippingDetails: {
-    name: string;
-    email: string;
-    phone: string;
-    address: string;
-    city: string;
-    postalCode: string;
-  };
-  paymentMethod: string;
-  subtotal: number;
-  shipping: number;
-  tax: number;
-  total: number;
-  status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled';
-  createdAt: string;
-  deliveredAt?: string;
-  cancelledAt?: string;
-}
+import { useAppDispatch, useAppSelector } from '@/redux/hooks';
+import { fetchAdminOrders, updateOrderStatus, Order, resetOrderState, setSelectedOrder } from '@/redux/slices/orderSlices';
 
 // Order detail modal component
 const OrderDetailModal = ({ order, visible, onClose }: { order: Order | null, visible: boolean, onClose: () => void }) => {
@@ -156,11 +124,13 @@ const OrderDetailModal = ({ order, visible, onClose }: { order: Order | null, vi
 const OrderItem = ({ 
   order, 
   onViewDetails, 
-  onUpdateStatus 
+  onUpdateStatus,
+  loading
 }: { 
   order: Order, 
   onViewDetails: (order: Order) => void,
-  onUpdateStatus: (orderId: string, status: 'pending' | 'processing' | 'shipped' | 'delivered' | 'cancelled') => void
+  onUpdateStatus: (orderId: string, status: Order['status']) => void,
+  loading: boolean
 }) => {
   // Get status color
   const getStatusColor = (status: string): string => {
@@ -215,8 +185,13 @@ const OrderItem = ({
         <View style={styles.actionButtonsRow}>
           {order.status !== 'processing' && order.status !== 'delivered' && order.status !== 'cancelled' && (
             <TouchableOpacity 
-              style={[styles.actionTextButton, styles.processingButton]}
+              style={[
+                styles.actionTextButton, 
+                styles.processingButton,
+                loading && styles.disabledButton
+              ]}
               onPress={() => onUpdateStatus(order.orderId, 'processing')}
+              disabled={loading}
             >
               <Ionicons name="time-outline" size={18} color="#FFFFFF" style={styles.buttonIcon} />
               <Text style={styles.actionTextButtonLabel}>Processing</Text>
@@ -225,8 +200,13 @@ const OrderItem = ({
           
           {order.status !== 'delivered' && order.status !== 'cancelled' && (
             <TouchableOpacity 
-              style={[styles.actionTextButton, styles.deliveredButton]}
+              style={[
+                styles.actionTextButton, 
+                styles.deliveredButton,
+                loading && styles.disabledButton
+              ]}
               onPress={() => onUpdateStatus(order.orderId, 'delivered')}
+              disabled={loading}
             >
               <Ionicons name="checkmark-circle-outline" size={18} color="#FFFFFF" style={styles.buttonIcon} />
               <Text style={styles.actionTextButtonLabel}>Delivered</Text>
@@ -235,8 +215,13 @@ const OrderItem = ({
           
           {order.status !== 'delivered' && order.status !== 'cancelled' && (
             <TouchableOpacity 
-              style={[styles.actionTextButton, styles.cancelButton]}
+              style={[
+                styles.actionTextButton, 
+                styles.cancelButton,
+                loading && styles.disabledButton
+              ]}
               onPress={() => onUpdateStatus(order.orderId, 'cancelled')}
+              disabled={loading}
             >
               <Ionicons name="close-circle-outline" size={18} color="#FFFFFF" style={styles.buttonIcon} />
               <Text style={styles.actionTextButtonLabel}>Cancel</Text>
@@ -249,170 +234,67 @@ const OrderItem = ({
 };
 
 export default function OrdersSection() {
-  const [orders, setOrders] = useState<Order[]>([]);
-  const [loading, setLoading] = useState(true);
+  const dispatch = useAppDispatch();
+  const { orders, loading, error, selectedOrder, success } = useAppSelector(state => state.orders);
+  
   const [selectedFilter, setSelectedFilter] = useState('all');
-  const [selectedOrder, setSelectedOrder] = useState<Order | null>(null);
   const [modalVisible, setModalVisible] = useState(false);
 
   // Fetch orders when component mounts
   useEffect(() => {
-    fetchOrders();
-  }, []);
+    dispatch(fetchAdminOrders());
+    
+    return () => {
+      // Reset order state when component unmounts
+      dispatch(resetOrderState());
+    };
+  }, [dispatch]);
   
-  // Fetch orders from API
-  const fetchOrders = async () => {
-    try {
-      setLoading(true);
-      const token = await AsyncStorage.getItem('token');
-      
-      if (!token) {
-        Alert.alert('Authentication Error', 'You need to be logged in to access this page.');
-        setLoading(false);
-        return;
-      }
-      
-      try {
-        const response = await axios.get(`${API_BASE_URL}/orders/admin`, {
-          headers: {
-            Authorization: `Bearer ${token}`
-          }
-        });
-        
-        if (response.data.success) {
-          setOrders(response.data.data);
-        } else {
-          Alert.alert('Error', 'Failed to fetch orders.');
+  // Display notification after successful status update
+  useEffect(() => {
+    if (success) {
+      // Schedule a local notification
+      const schedulePushNotification = async () => {
+        if (selectedOrder) {
+          await Notifications.scheduleNotificationAsync({
+            content: {
+              title: 'Order Status Updated',
+              body: `Order #${selectedOrder.orderId} status changed to: ${selectedOrder.status}`,
+              data: { 
+                orderId: selectedOrder.orderId,
+                status: selectedOrder.status,
+                forceShow: true,
+                type: 'orderUpdate',
+                immediate: true,
+                timestamp: Date.now()
+              },
+            },
+            trigger: null // Send immediately
+          });
+          
+          console.log('Scheduled immediate local notification for status update');
         }
-      } catch (error: any) {
-        console.error('Error fetching orders:', error);
-        
-        if (error.response) {
-          if (error.response.status === 403) {
-            Alert.alert(
-              'Access Denied', 
-              'You do not have admin privileges to access this page.'
-            );
-          } else {
-            Alert.alert('Error', `Server error: ${error.response.status}`);
-          }
-        } else if (error.request) {
-          Alert.alert('Network Error', 'Could not connect to the server. Please check your internet connection.');
-        } else {
-          Alert.alert('Error', 'An unknown error occurred while fetching orders.');
-        }
-      }
-    } finally {
-      setLoading(false);
+      };
+      
+      schedulePushNotification();
+      
+      // Reset success state after notification
+      setTimeout(() => {
+        dispatch(resetOrderState());
+      }, 1000);
     }
-  };
+  }, [success, selectedOrder]);
   
-  // Update order status
-  const updateOrderStatus = async (orderId: string, newStatus: string) => {
-    try {
-      setLoading(true);
-      console.log(`Updating order ${orderId} status to ${newStatus}`);
-
-      const userToken = await AsyncStorage.getItem('userToken');
-      
-      if (!userToken) {
-        Alert.alert('Error', 'You need to be logged in to update orders');
-        setLoading(false);
-        return;
-      }
-
-      const response = await axios.patch(
-        `${API_BASE_URL}/orders/admin/status/${orderId}`,
-        { status: newStatus },
-        {
-          headers: {
-            'Authorization': `Bearer ${userToken}`,
-            'Content-Type': 'application/json'
-          }
-        }
-      );
-
-      if (response.data.success) {
-        console.log('Order status updated successfully');
-        console.log('Status changed:', response.data.statusChanged);
-        console.log('Previous status:', response.data.previousStatus);
-        console.log('New status:', response.data.newStatus);
-        
-        // Create a better notification message based on the status change
-        let notificationBody = `Order #${orderId} status changed to: ${newStatus}`;
-        if (response.data.previousStatus && response.data.newStatus) {
-          notificationBody = `Order #${orderId} status changed from ${response.data.previousStatus} to ${response.data.newStatus}`;
-        }
-        
-        // IMPORTANT: Additional attempt to create notification receipt
-        // This bypasses the need for push notifications and directly creates 
-        // a receipt that the client can check for
-        try {
-          console.log('Creating direct notification receipt for order status update');
-          
-          // Attempt to create a receipt
-          const receiptResponse = await axios.post(
-            `${API_BASE_URL}/notifications/receipt`,
-            {
-              orderId,
-              status: newStatus,
-              previousStatus: response.data.previousStatus,
-              message: notificationBody,
-              timestamp: Date.now(),
-              forceShow: true
-            },
-            {
-              headers: {
-                'Authorization': `Bearer ${userToken}`,
-                'Content-Type': 'application/json'
-              }
-            }
-          );
-          
-          if (receiptResponse.data.success) {
-            console.log('Notification receipt created successfully');
-          }
-        } catch (receiptError: any) {
-          // If the receipt endpoint doesn't exist, just log and continue
-          console.log('Notification receipt API not available:', receiptError.message);
-        }
-        
-        // Immediate local notification for testing purposes
-        await Notifications.scheduleNotificationAsync({
-          content: {
-            title: 'Order Status Updated',
-            body: notificationBody,
-            data: { 
-              orderId, 
-              status: newStatus,
-              forceShow: true,  // Special flag to force show notification
-              type: 'orderUpdate',
-              immediate: true,   // Flag to indicate this is an immediate notification
-              previousStatus: response.data.previousStatus,
-              statusChanged: true,
-              timestamp: response.data.timestamp || Date.now()
-            },
-          },
-          trigger: null // Send immediately
-        });
-        
-        console.log('Scheduled immediate local notification for status update');
-        
-        // Remove success Alert dialog - just log the success
-        console.log('Success', notificationBody);
-        
-        // Refresh order list
-        fetchOrders();
-      } else {
-        console.error('Failed to update order status:', response.data.message);
-        Alert.alert('Error', response.data.message || 'Failed to update order status');
-      }
-    } catch (error) {
-      console.error('Error updating order status:', error);
-      Alert.alert('Error', 'An error occurred while updating the order status');
-    } finally {
-      setLoading(false);
+  // Display error alerts
+  useEffect(() => {
+    if (error) {
+      Alert.alert('Error', error);
     }
+  }, [error]);
+  
+  // Handle order status update
+  const handleUpdateStatus = (orderId: string, newStatus: Order['status']) => {
+    dispatch(updateOrderStatus({ orderId, status: newStatus }));
   };
   
   // Filter orders based on selected filter
@@ -425,14 +307,14 @@ export default function OrdersSection() {
   
   // View order details
   const viewOrderDetails = (order: Order) => {
-    setSelectedOrder(order);
+    dispatch(setSelectedOrder(order));
     setModalVisible(true);
   };
   
   // Close order details modal
   const closeOrderDetails = () => {
     setModalVisible(false);
-    setSelectedOrder(null);
+    dispatch(setSelectedOrder(null));
   };
 
   return (
@@ -476,19 +358,26 @@ export default function OrdersSection() {
           </TouchableOpacity>
         </View>
         
-        <FlatList
-          data={getFilteredOrders()}
-          keyExtractor={(item) => item._id || item.orderId}
-          renderItem={({ item }) => (
-            <OrderItem 
-              order={item}
-              onViewDetails={viewOrderDetails}
-              onUpdateStatus={updateOrderStatus}
-            />
-          )}
-          contentContainerStyle={styles.listContent}
-          showsVerticalScrollIndicator={false}
-        />
+        {loading && orders.length === 0 ? (
+          <View style={styles.loadingContainer}>
+            <Text style={styles.loadingText}>Loading orders...</Text>
+          </View>
+        ) : (
+          <FlatList
+            data={getFilteredOrders()}
+            keyExtractor={(item) => item._id || item.orderId}
+            renderItem={({ item }) => (
+              <OrderItem 
+                order={item}
+                onViewDetails={viewOrderDetails}
+                onUpdateStatus={handleUpdateStatus}
+                loading={loading}
+              />
+            )}
+            contentContainerStyle={styles.listContent}
+            showsVerticalScrollIndicator={false}
+          />
+        )}
       </View>
       
       <OrderDetailModal
@@ -501,6 +390,21 @@ export default function OrdersSection() {
 }
 
 const styles = StyleSheet.create({
+  // ...existing code...
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 20,
+  },
+  loadingText: {
+    fontSize: 16,
+    color: '#666',
+  },
+  disabledButton: {
+    opacity: 0.5,
+  },
+  
   safeArea: {
     flex: 1,
     backgroundColor: '#f5f5f5',
@@ -830,4 +734,4 @@ const styles = StyleSheet.create({
     fontWeight: 'bold',
     color: '#c41818',
   },
-}); 
+});

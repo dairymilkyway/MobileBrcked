@@ -7,45 +7,16 @@ import {
   TouchableOpacity, 
   ScrollView, 
   Platform,
-  Image
+  Image,
+  ActivityIndicator
 } from 'react-native';
 import { StatusBar } from 'expo-status-bar';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserHeader from '@/components/UserHeader';
 import { useNavigation, useRoute, useFocusEffect } from '@react-navigation/native';
 import { useRouter } from 'expo-router';
-import AsyncStorage from '@react-native-async-storage/async-storage';
-import { API_BASE_URL } from '@/env';
-
-// Define interfaces
-interface CartItem {
-  id: number;
-  productId: string;
-  productName: string;
-  price: number;
-  quantity: number;
-  imageURL: string | null;
-}
-
-interface OrderDetails {
-  orderId: string;
-  createdAt: string;
-  items: CartItem[];
-  shippingDetails: {
-    name: string;
-    email: string;
-    phone: string;
-    address: string;
-    city: string;
-    postalCode: string;
-  };
-  paymentMethod: 'gcash' | 'cod' | 'credit_card';
-  subtotal: number;
-  shipping: number;
-  tax: number;
-  total: number;
-  status: 'pending' | 'processing' | 'shipped' | 'delivered';
-}
+import { useAppSelector, useAppDispatch } from '@/redux/hooks';
+import { fetchOrderById } from '@/redux/slices/orderSlices';
 
 // Define route params interface
 interface RouteParams {
@@ -58,7 +29,10 @@ export default function OrderConfirmationScreen() {
   const router = useRouter();
   const route = useRoute();
   const params = route.params as RouteParams;
-  const [order, setOrder] = React.useState<OrderDetails | null>(null);
+  const dispatch = useAppDispatch();
+  
+  // Get order from Redux store
+  const { selectedOrder, loading, error } = useAppSelector(state => state.orders);
   
   // Hide the default header
   useEffect(() => {
@@ -70,63 +44,18 @@ export default function OrderConfirmationScreen() {
   // Load order details when screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
-      loadOrderDetails();
+      const orderId = params?.orderId;
+      
+      if (orderId) {
+        dispatch(fetchOrderById(orderId));
+      }
       
       // Return a cleanup function if needed
       return () => {
         // Cleanup if necessary
       };
-    }, [params?.orderId])
+    }, [params?.orderId, dispatch])
   );
-
-  const loadOrderDetails = async () => {
-    try {
-      const orderId = params?.orderId;
-      
-      if (!orderId) {
-        console.error('No order ID provided');
-        return;
-      }
-      
-      // First try to get from API
-      const token = await AsyncStorage.getItem('token');
-      
-      if (token) {
-        try {
-          const response = await fetch(`${API_BASE_URL}/orders/${orderId}`, {
-            headers: {
-              'Authorization': `Bearer ${token}`
-            }
-          });
-          
-          if (response.ok) {
-            const data = await response.json();
-            
-            if (data.success && data.data) {
-              setOrder(data.data);
-              return;
-            }
-          }
-        } catch (apiError) {
-          console.error('Error fetching order from API:', apiError);
-        }
-      }
-      
-      // Fallback to AsyncStorage
-      const ordersJson = await AsyncStorage.getItem('userOrders');
-      
-      if (ordersJson) {
-        const orders = JSON.parse(ordersJson) as OrderDetails[];
-        const foundOrder = orders.find(o => o.orderId === orderId);
-        
-        if (foundOrder) {
-          setOrder(foundOrder);
-        }
-      }
-    } catch (error) {
-      console.error('Error loading order details:', error);
-    }
-  };
   
   const formatDate = (dateString: string) => {
     if (!dateString) return '';
@@ -182,7 +111,24 @@ export default function OrderConfirmationScreen() {
       <UserHeader section="Order Confirmation" />
       
       <ScrollView style={styles.content} showsVerticalScrollIndicator={false}>
-        {order ? (
+        {loading ? (
+          <View style={styles.loadingContainer}>
+            <ActivityIndicator size="large" color="#E3000B" />
+            <Text style={styles.loadingText}>Loading order details...</Text>
+          </View>
+        ) : error ? (
+          <View style={styles.noOrderContainer}>
+            <MaterialCommunityIcons name="alert-circle-outline" size={80} color="#E3000B" />
+            <Text style={styles.noOrderText}>Error: {error}</Text>
+            <TouchableOpacity 
+              style={styles.backButton}
+              onPress={() => router.push('/user/home')}
+            >
+              <Text style={styles.backButtonText}>RETURN HOME</Text>
+              <View style={styles.backButtonBottom} />
+            </TouchableOpacity>
+          </View>
+        ) : selectedOrder ? (
           <>
             <View style={styles.confirmationHeader}>
               <View style={styles.checkCircle}>
@@ -192,9 +138,9 @@ export default function OrderConfirmationScreen() {
               <Text style={styles.confirmationText}>
                 Thank you for your order. Your order has been placed successfully.
               </Text>
-              <Text style={styles.orderIdText}>Order ID: {order.orderId}</Text>
+              <Text style={styles.orderIdText}>Order ID: {selectedOrder.orderId}</Text>
               <Text style={styles.orderDateText}>
-                Placed on: {formatDate(order.createdAt) || 'Processing date'}
+                Placed on: {formatDate(selectedOrder.createdAt) || 'Processing date'}
               </Text>
             </View>
             
@@ -212,7 +158,7 @@ export default function OrderConfirmationScreen() {
                 
                 {/* Product details */}
                 <View style={styles.productsList}>
-                  {order.items.map((item, index) => (
+                  {selectedOrder.items.map((item, index) => (
                     <View key={item.id || `item-${index}`} style={styles.productItem}>
                       <Image
                         source={{ uri: item.imageURL || 'https://via.placeholder.com/60' }}
@@ -231,22 +177,22 @@ export default function OrderConfirmationScreen() {
                 
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Subtotal:</Text>
-                  <Text style={styles.summaryValue}>₱{order.subtotal.toFixed(2)}</Text>
+                  <Text style={styles.summaryValue}>₱{selectedOrder.subtotal.toFixed(2)}</Text>
                 </View>
                 
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Shipping:</Text>
-                  <Text style={styles.summaryValue}>₱{order.shipping.toFixed(2)}</Text>
+                  <Text style={styles.summaryValue}>₱{selectedOrder.shipping.toFixed(2)}</Text>
                 </View>
                 
                 <View style={styles.summaryRow}>
                   <Text style={styles.summaryLabel}>Tax (12%):</Text>
-                  <Text style={styles.summaryValue}>₱{order.tax.toFixed(2)}</Text>
+                  <Text style={styles.summaryValue}>₱{selectedOrder.tax.toFixed(2)}</Text>
                 </View>
                 
                 <View style={[styles.summaryRow, styles.totalRow]}>
                   <Text style={styles.totalLabel}>Total:</Text>
-                  <Text style={styles.totalValue}>₱{order.total.toFixed(2)}</Text>
+                  <Text style={styles.totalValue}>₱{selectedOrder.total.toFixed(2)}</Text>
                 </View>
               </View>
             </View>
@@ -265,29 +211,42 @@ export default function OrderConfirmationScreen() {
                 
                 <View style={styles.infoSection}>
                   <Text style={styles.infoLabel}>Name:</Text>
-                  <Text style={styles.infoValue}>{order.shippingDetails.name}</Text>
+                  <Text style={styles.infoValue}>{selectedOrder.shippingDetails.name}</Text>
                 </View>
                 
                 <View style={styles.infoSection}>
                   <Text style={styles.infoLabel}>Email:</Text>
-                  <Text style={styles.infoValue}>{order.shippingDetails.email}</Text>
+                  <Text style={styles.infoValue}>{selectedOrder.shippingDetails.email}</Text>
                 </View>
                 
                 <View style={styles.infoSection}>
                   <Text style={styles.infoLabel}>Phone:</Text>
-                  <Text style={styles.infoValue}>{order.shippingDetails.phone}</Text>
+                  <Text style={styles.infoValue}>{selectedOrder.shippingDetails.phone}</Text>
                 </View>
                 
                 <View style={styles.infoSection}>
                   <Text style={styles.infoLabel}>Address:</Text>
                   <Text style={styles.infoValue}>
-                    {order.shippingDetails.address}, {order.shippingDetails.city}, {order.shippingDetails.postalCode}
+                    {selectedOrder.shippingDetails.address}, {selectedOrder.shippingDetails.city}, {selectedOrder.shippingDetails.postalCode}
                   </Text>
                 </View>
                 
                 <View style={styles.infoSection}>
                   <Text style={styles.infoLabel}>Payment Method:</Text>
-                  <Text style={styles.infoValue}>{getPaymentMethodText(order.paymentMethod)}</Text>
+                  <Text style={styles.infoValue}>{getPaymentMethodText(selectedOrder.paymentMethod)}</Text>
+                </View>
+                
+                <View style={styles.infoSection}>
+                  <Text style={styles.infoLabel}>Status:</Text>
+                  <Text style={[styles.infoValue, { 
+                    color: 
+                      selectedOrder.status === 'delivered' ? '#4CAF50' : 
+                      selectedOrder.status === 'processing' ? '#2196F3' :  
+                      selectedOrder.status === 'shipped' ? '#FF9800' :
+                      selectedOrder.status === 'cancelled' ? '#F44336' : '#9E9E9E'
+                  }]}>
+                    {selectedOrder.status.charAt(0).toUpperCase() + selectedOrder.status.slice(1)}
+                  </Text>
                 </View>
               </View>
             </View>
@@ -329,6 +288,21 @@ export default function OrderConfirmationScreen() {
 }
 
 const styles = StyleSheet.create({
+  // ...existing code...
+  
+  loadingContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    padding: 32,
+    marginTop: 100,
+  },
+  loadingText: {
+    marginTop: 16,
+    fontSize: 16,
+    color: '#666666',
+  },
+
   container: {
     flex: 1,
     backgroundColor: '#F2F2F2',

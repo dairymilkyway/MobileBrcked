@@ -20,18 +20,8 @@ import UserHeader from '@/components/UserHeader';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import { AntDesign } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
-const FETCH_TIMEOUT = 10000;
-
-interface Product {
-  _id: string;
-  name: string;
-  price: number;
-  imageURL: string[];  // Changed from image: string to match home.tsx
-  pieces: number;
-  category: string;
-  description: string;
-  stock: number; // Added stock property
-}
+import { useAppDispatch, useAppSelector } from '@/redux/hooks';
+import { fetchProductDetail, clearSelectedProduct } from '@/redux/slices/productSlice';
 
 interface RatingData {
   averageRating: number;
@@ -41,9 +31,16 @@ interface RatingData {
 export default function ProductDetail() {
   const { id } = useLocalSearchParams();
   const router = useRouter();
-  const [product, setProduct] = useState<Product | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const dispatch = useAppDispatch();
+  
+  // Get product data from Redux store
+  const { 
+    selectedProduct: product, 
+    productDetailLoading: loading, 
+    productDetailError: error 
+  } = useAppSelector(state => state.products);
+  
+  // Local UI state
   const [quantity, setQuantity] = useState(1);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const carouselRef = useRef<FlatList>(null);
@@ -57,11 +54,17 @@ export default function ProductDetail() {
   const [productImages, setProductImages] = useState<string[]>([]);
   
   useEffect(() => {
-    fetchProductDetails();
     if (id) {
+      // Fetch product details using Redux action
+      dispatch(fetchProductDetail(id.toString()));
       fetchProductRatings();
     }
-  }, [id]);
+    
+    // Clean up on component unmount
+    return () => {
+      dispatch(clearSelectedProduct());
+    };
+  }, [id, dispatch]);
   
   useEffect(() => {
     // If product is loaded, initialize the image array
@@ -83,7 +86,7 @@ export default function ProductDetail() {
     
     const timeout = setTimeout(() => {
       controller.abort();
-    }, FETCH_TIMEOUT);
+    }, 10000); // 10 second timeout
     
     try {
       const response = await fetch(url, { ...options, signal });
@@ -92,46 +95,6 @@ export default function ProductDetail() {
     } catch (error) {
       clearTimeout(timeout);
       throw error;
-    }
-  };
-
-  const fetchProductDetails = async () => {
-    if (!id) return;
-    
-    try {
-      setLoading(true);
-      
-      const apiUrl = `${API_BASE_URL}/products/${id}`;
-      console.log(`Fetching product details from: ${apiUrl}`);
-      
-      const response = await fetchWithTimeout(apiUrl);
-      
-      if (!response.ok) {
-        const errorData = await response.json().catch(() => ({}));
-        throw new Error(
-          errorData.message || `Server responded with status: ${response.status}`
-        );
-      }
-      
-      const responseData = await response.json();
-      
-      if (responseData.success) {
-        setProduct(responseData.data);
-        setError(null);
-      } else {
-        throw new Error(responseData.message || 'Failed to fetch product details');
-      }
-    } catch (err: any) {
-      console.error('Error fetching product details:', err);
-      if (err.name === 'AbortError') {
-        setError('Request timed out. Please check your connection and try again.');
-      } else if (err.message.includes('Network request failed')) {
-        setError('Network error. Please check your connection and server status.');
-      } else {
-        setError(`Error loading product details: ${err.message}`);
-      }
-    } finally {
-      setLoading(false);
     }
   };
 
@@ -363,7 +326,7 @@ export default function ProductDetail() {
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity 
             style={styles.retryButton}
-            onPress={fetchProductDetails}
+            onPress={() => id && dispatch(fetchProductDetail(id.toString()))}
           >
             <Text style={styles.retryButtonText}>Try Again</Text>
           </TouchableOpacity>

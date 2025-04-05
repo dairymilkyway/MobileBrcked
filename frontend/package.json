@@ -60,7 +60,9 @@
     "react-native-webview": "13.12.5",
     "react-redux": "^9.2.0",
     "redux": "^5.0.1",
-    "undefined": "expo-auth-session/providers/google"
+    "undefined": "expo-auth-session/providers/google",
+    "expo-notifications": "~0.29.14",
+    "expo-device": "~7.0.3"
   },
   "devDependencies": {
     "@babel/core": "^7.25.2",
