@@ -168,6 +168,7 @@ export default function NotificationBell() {
       // Determine if we need to prevent navigation (always on Android)
       const shouldPreventNavigation = Platform.OS === 'android';
       if (shouldPreventNavigation) {
+        console.log(`${Platform.OS}: Setting preventNavigation flag for Android`);
         data.preventNavigation = true;
       }
       
@@ -175,8 +176,7 @@ export default function NotificationBell() {
       setTimeout(() => {
         // Use the OrderModalContext to show the order details
         showOrderModal(data.orderId, shouldPreventNavigation);
-      }, 100);
-      
+      }, Platform.OS === 'android' ? 300 : 100);
     } else if (data?.orderId) {
       console.log(`${Platform.OS}: Generic order notification detected, orderId:`, data.orderId);
       
@@ -192,6 +192,7 @@ export default function NotificationBell() {
         
         // Add prevention flag for Android
         if (shouldPreventNavigation) {
+          console.log(`${Platform.OS}: Setting preventNavigation flag for Android generic notification`);
           data.preventNavigation = true;
         }
       }
@@ -200,7 +201,7 @@ export default function NotificationBell() {
       setTimeout(() => {
         // Use the OrderModalContext to show the order details
         showOrderModal(data.orderId, shouldPreventNavigation);
-      }, 100);
+      }, Platform.OS === 'android' ? 300 : 100);
     }
   };
 

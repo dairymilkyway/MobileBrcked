@@ -44,6 +44,7 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   useEffect(() => {
     if (Platform.OS === 'android') {
       const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        // If modal is visible, intercept back button 
         if (modalVisible) {
           console.log('Android: Back button pressed while modal visible, closing modal');
           hideOrderModal();
@@ -117,13 +118,14 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   useEffect(() => {
     if (notifications.length > 0) {
       const latestNotification = notifications[0];
-      console.log('Latest notification:', {
+      console.log(`${Platform.OS}: Latest notification:`, {
         id: latestNotification.id,
         title: latestNotification.title,
         read: latestNotification.read,
         dataType: latestNotification.data?.type,
         orderId: latestNotification.data?.orderId,
         showModal: latestNotification.data?.showModal,
+        preventNavigation: latestNotification.data?.preventNavigation,
         source: latestNotification.data?.source,
         clicked: latestNotification.data?.clicked
       });
@@ -133,8 +135,22 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           (latestNotification.data?.type === 'orderUpdate' || latestNotification.data?.type === 'orderPlaced') && 
           latestNotification.data?.orderId) {
         
-        const shouldPreventNavigation = Platform.OS === 'android' || latestNotification.data?.preventNavigation === true;
-        showOrderModal(latestNotification.data.orderId, shouldPreventNavigation);
+        // Check if we should prevent navigation
+        const shouldPreventNavigation = latestNotification.data?.preventNavigation === true || 
+                                        Platform.OS === 'android';
+        
+        console.log(`${Platform.OS}: Should prevent navigation: ${shouldPreventNavigation}`);
+        
+        // On Android, we need a small delay to ensure the modal shows correctly
+        if (Platform.OS === 'android') {
+          setTimeout(() => {
+            if (latestNotification.data?.orderId) {
+              showOrderModal(latestNotification.data.orderId, shouldPreventNavigation);
+            }
+          }, 300);
+        } else {
+          showOrderModal(latestNotification.data.orderId, shouldPreventNavigation);
+        }
       }
     }
   }, [notifications]);
@@ -150,12 +166,30 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         // If this is an order notification with orderId, show the modal
         // Only shown when user explicitly clicked the notification
         if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
-          console.log('Found notification response with order ID:', data.orderId);
-          showOrderModal(data.orderId, Platform.OS === 'android');
+          console.log(`${Platform.OS}: Found notification response with order ID:`, data.orderId);
+          
+          // Handle platform-specific behavior
+          if (Platform.OS === 'android') {
+            console.log(`${Platform.OS}: Using Android-specific handling for app state change`);
+            
+            // Mark data for special handling
+            if (data) {
+              data.preventNavigation = true;
+              data.clicked = true;
+            }
+            
+            // Use setTimeout to ensure the modal shows after any navigation attempts
+            setTimeout(() => {
+              showOrderModal(data.orderId, true);
+            }, 500);
+          } else {
+            // iOS handling
+            showOrderModal(data.orderId, false);
+          }
         }
       }
     } catch (error) {
-      console.error('Error checking notification response:', error);
+      console.error(`${Platform.OS}: Error checking notification response:`, error);
     }
   };
 
@@ -168,16 +202,30 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // If this is an order notification with orderId, show the modal
       // Only shown when user explicitly clicked the notification
       if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
-        console.log('Notification response listener caught order ID:', data.orderId);
+        console.log(`${Platform.OS}: Notification response listener caught order ID:`, data.orderId);
         
-        // On Android, we need to prevent navigation
+        // Handle platform-specific behavior
         const shouldPreventNavigation = Platform.OS === 'android';
         
-        // Use setTimeout to ensure the modal shows after any navigation attempts
-        setTimeout(() => {
-          console.log(`${Platform.OS}: Showing order modal with proper handling`);
-          showOrderModal(data.orderId, shouldPreventNavigation); 
-        }, Platform.OS === 'android' ? 500 : 300);
+        if (Platform.OS === 'android') {
+          console.log(`${Platform.OS}: Using Android-specific handling for notification response`);
+          
+          // Mark data for special handling
+          if (data) {
+            data.preventNavigation = true;
+            data.clicked = true;
+          }
+          
+          // Use setTimeout to ensure the modal shows after any navigation attempts
+          setTimeout(() => {
+            console.log(`${Platform.OS}: Showing order modal with navigation prevention`);
+            showOrderModal(data.orderId, true); 
+          }, 500);
+        } else {
+          // iOS handling
+          console.log(`${Platform.OS}: Using iOS standard handling for notification response`);
+          showOrderModal(data.orderId, false);
+        }
       }
     });
 
@@ -190,15 +238,24 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     console.log(`${Platform.OS}: Opening order details modal for order ID:`, orderId, 
       preventNavigation ? '(preventing navigation)' : '');
     
-    // For both Android and iOS, ensure consistent behavior
+    // If we need to prevent navigation (typically on Android)
     if (preventNavigation && Platform.OS === 'android') {
-      // For Android with navigation prevention:
-      // 1. Make sure we're on a stable screen first
-      // 2. Then show the modal with a slight delay
+      console.log(`${Platform.OS}: Using Android-specific navigation prevention logic`);
+      
+      // On Android, we need a special approach to prevent navigation and show the modal
+      // First, save the current state so we can restore it
+      if (router && router.canGoBack()) {
+        console.log(`${Platform.OS}: Navigation can go back, handling special case`);
+      }
+      
+      // Delay showing the modal to ensure UI is stable
       setTimeout(() => {
+        // Show the modal
         setSelectedOrderId(orderId);
         setModalVisible(true);
         modalOpenedTimestamp.current = Date.now();
+        
+        console.log(`${Platform.OS}: Order modal displayed with navigation prevention`);
       }, 300);
     } else {
       // For iOS or when not preventing navigation:
@@ -206,6 +263,8 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       setSelectedOrderId(orderId);
       setModalVisible(true);
       modalOpenedTimestamp.current = Date.now();
+      
+      console.log(`${Platform.OS}: Order modal displayed normally`);
     }
   };
 

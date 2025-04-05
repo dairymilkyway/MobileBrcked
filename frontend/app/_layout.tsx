@@ -72,6 +72,9 @@ function NotificationSetup() {
     if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
       console.log(`${Platform.OS}: Notification response for order:`, data.orderId);
       
+      // Set the preventNavigation flag for Android devices
+      const shouldPreventNavigation = Platform.OS === 'android';
+      
       // Prepare notification data with platform-specific flags
       const notificationData = {
         ...data,
@@ -79,20 +82,25 @@ function NotificationSetup() {
         orderId: data.orderId,
         showModal: true,       // This flag indicates the modal should be shown
         clicked: true,         // Add explicit clicked flag
-        preventNavigation: Platform.OS === 'android', // Prevent navigation on Android
+        preventNavigation: shouldPreventNavigation, // Prevent navigation on Android
         timestamp: Date.now()  // Add timestamp for uniqueness
       };
       
-      // Add a notification to the Redux store, which will trigger the UI to show the order details modal
-      dispatch(
-        addNotification({
-          title: response.notification.request.content.title || 'Order Update',
-          body: response.notification.request.content.body || 'Your order has been updated',
-          data: notificationData
-        })
-      );
+      console.log(`${Platform.OS}: Setting preventNavigation=${shouldPreventNavigation} for notification`);
       
-      console.log(`${Platform.OS}: Notification clicked for order:`, data.orderId);
+      // Give a short delay to allow any UI to settle first
+      setTimeout(() => {
+        // Add a notification to the Redux store, which will trigger the UI to show the order details modal
+        dispatch(
+          addNotification({
+            title: response.notification.request.content.title || 'Order Update',
+            body: response.notification.request.content.body || 'Your order has been updated',
+            data: notificationData
+          })
+        );
+        
+        console.log(`${Platform.OS}: Notification clicked for order:`, data.orderId);
+      }, Platform.OS === 'android' ? 200 : 0);
     }
   };
 
@@ -586,6 +594,8 @@ export default function RootLayout() {
               timestamp: Date.now()  // Add timestamp for uniqueness
             };
             
+            console.log(`${Platform.OS}: Setting preventNavigation=${isAndroid} for initial notification`);
+            
             // We need to delay this slightly to ensure the store is ready
             // Use different delays based on platform
             setTimeout(() => {
@@ -598,7 +608,7 @@ export default function RootLayout() {
               );
               
               console.log(`${Platform.OS}: Added initial order notification with preventNavigation=${isAndroid}`);
-            }, isAndroid ? 1000 : 800); // Slightly longer delay on Android
+            }, isAndroid ? 1500 : 800); // Much longer delay on Android to ensure router has settled
           }
         }
       } catch (error) {
