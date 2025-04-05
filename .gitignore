@@ -2,6 +2,7 @@
 node_modules/
 
 # Database files
+backend/database/database.sqlite
 backend/database.sqlite
 *.sqlite
 *.sqlite3
