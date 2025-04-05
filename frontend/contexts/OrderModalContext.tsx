@@ -172,16 +172,28 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
           if (Platform.OS === 'android') {
             console.log(`${Platform.OS}: Using Android-specific handling for app state change`);
             
-            // Mark data for special handling
-            if (data) {
-              data.preventNavigation = true;
-              data.clicked = true;
+            try {
+              // Mark data for special handling
+              if (data) {
+                data.preventNavigation = true;
+                data.clicked = true;
+              }
+              
+              // Use setTimeout to ensure the modal shows after any navigation attempts
+              setTimeout(() => {
+                try {
+                  if (data?.orderId) {
+                    showOrderModal(data.orderId, true);
+                  } else {
+                    console.error(`${Platform.OS}: Missing orderId in notification data`);
+                  }
+                } catch (modalError) {
+                  console.error(`${Platform.OS}: Error showing modal from notification:`, modalError);
+                }
+              }, 500);
+            } catch (dataError) {
+              console.error(`${Platform.OS}: Error processing notification data:`, dataError);
             }
-            
-            // Use setTimeout to ensure the modal shows after any navigation attempts
-            setTimeout(() => {
-              showOrderModal(data.orderId, true);
-            }, 500);
           } else {
             // iOS handling
             showOrderModal(data.orderId, false);
@@ -195,76 +207,129 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
 
   // Set up notification response listener
   useEffect(() => {
-    // Set up notification response handler for when users tap on notifications
-    const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-      const data = response.notification.request.content.data;
-      
-      // If this is an order notification with orderId, show the modal
-      // Only shown when user explicitly clicked the notification
-      if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
-        console.log(`${Platform.OS}: Notification response listener caught order ID:`, data.orderId);
-        
-        // Handle platform-specific behavior
-        const shouldPreventNavigation = Platform.OS === 'android';
-        
-        if (Platform.OS === 'android') {
-          console.log(`${Platform.OS}: Using Android-specific handling for notification response`);
+    try {
+      // Set up notification response handler for when users tap on notifications
+      const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
+        try {
+          const data = response.notification.request.content.data;
           
-          // Mark data for special handling
-          if (data) {
-            data.preventNavigation = true;
-            data.clicked = true;
+          // If this is an order notification with orderId, show the modal
+          // Only shown when user explicitly clicked the notification
+          if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
+            console.log(`${Platform.OS}: Notification response listener caught order ID:`, data.orderId);
+            
+            // Handle platform-specific behavior
+            const shouldPreventNavigation = Platform.OS === 'android';
+            
+            if (Platform.OS === 'android') {
+              console.log(`${Platform.OS}: Using Android-specific handling for notification response`);
+              
+              try {
+                // Mark data for special handling
+                if (data) {
+                  data.preventNavigation = true;
+                  data.clicked = true;
+                }
+                
+                // Use setTimeout to ensure the modal shows after any navigation attempts
+                setTimeout(() => {
+                  try {
+                    console.log(`${Platform.OS}: Showing order modal with navigation prevention`);
+                    if (data?.orderId) {
+                      showOrderModal(data.orderId, true);
+                    }
+                  } catch (modalError) {
+                    console.error(`${Platform.OS}: Error showing modal:`, modalError);
+                  }
+                }, 500);
+              } catch (dataError) {
+                console.error(`${Platform.OS}: Error processing notification data:`, dataError);
+              }
+            } else {
+              // iOS handling
+              console.log(`${Platform.OS}: Using iOS standard handling for notification response`);
+              showOrderModal(data.orderId, false);
+            }
           }
-          
-          // Use setTimeout to ensure the modal shows after any navigation attempts
-          setTimeout(() => {
-            console.log(`${Platform.OS}: Showing order modal with navigation prevention`);
-            showOrderModal(data.orderId, true); 
-          }, 500);
-        } else {
-          // iOS handling
-          console.log(`${Platform.OS}: Using iOS standard handling for notification response`);
-          showOrderModal(data.orderId, false);
+        } catch (responseError) {
+          console.error(`${Platform.OS}: Error handling notification response:`, responseError);
         }
-      }
-    });
+      });
 
-    return () => {
-      Notifications.removeNotificationSubscription(responseListener);
-    };
+      return () => {
+        Notifications.removeNotificationSubscription(responseListener);
+      };
+    } catch (setupError) {
+      console.error(`${Platform.OS}: Error setting up notification listener:`, setupError);
+      return () => {}; // Return empty cleanup function
+    }
   }, []);
 
   const showOrderModal = (orderId: string, preventNavigation: boolean = false) => {
-    console.log(`${Platform.OS}: Opening order details modal for order ID:`, orderId, 
-      preventNavigation ? '(preventing navigation)' : '');
-    
-    // If we need to prevent navigation (typically on Android)
-    if (preventNavigation && Platform.OS === 'android') {
-      console.log(`${Platform.OS}: Using Android-specific navigation prevention logic`);
+    try {
+      console.log(`${Platform.OS}: Opening order details modal for order ID:`, orderId, 
+        preventNavigation ? '(preventing navigation)' : '');
       
-      // On Android, we need a special approach to prevent navigation and show the modal
-      // First, save the current state so we can restore it
-      if (router && router.canGoBack()) {
-        console.log(`${Platform.OS}: Navigation can go back, handling special case`);
+      if (!orderId) {
+        console.error(`${Platform.OS}: Cannot show modal - missing orderId`);
+        return;
       }
       
-      // Delay showing the modal to ensure UI is stable
-      setTimeout(() => {
-        // Show the modal
+      // If we need to prevent navigation (typically on Android)
+      if (preventNavigation && Platform.OS === 'android') {
+        console.log(`${Platform.OS}: Using Android-specific navigation prevention logic`);
+        
+        // For Android with navigation prevention:
+        // 1. Set a flag to remember we want to show a modal 
+        // 2. Use a timeout to ensure we show the modal AFTER any navigation might occur
+        // 3. Use a longer delay on Android for stability
+        
+        const modalDelay = 400; // Slightly longer delay for Android stability
+        
+        // Set modal info first, in case the timeout is never triggered
+        setSelectedOrderId(orderId);
+        
+        // Use a timeout to delay showing the modal
+        setTimeout(() => {
+          try {
+            console.log(`${Platform.OS}: Showing modal after delay (${modalDelay}ms)`);
+            
+            // Double-check the orderId is still the one we want to show
+            if (selectedOrderId === orderId) {
+              setModalVisible(true);
+              modalOpenedTimestamp.current = Date.now();
+              console.log(`${Platform.OS}: Order modal displayed with navigation prevention`);
+            } else {
+              console.log(`${Platform.OS}: OrderId changed during delay, showing new orderId:`, selectedOrderId);
+              setModalVisible(true);
+              modalOpenedTimestamp.current = Date.now();
+            }
+          } catch (innerError) {
+            console.error(`${Platform.OS}: Error displaying modal with prevention:`, innerError);
+            
+            // Attempt recovery if there was an error
+            setSelectedOrderId(orderId);
+            setModalVisible(true);
+          }
+        }, modalDelay);
+      } else {
+        // Standard handling for iOS or when not preventing navigation
         setSelectedOrderId(orderId);
         setModalVisible(true);
         modalOpenedTimestamp.current = Date.now();
         
-        console.log(`${Platform.OS}: Order modal displayed with navigation prevention`);
-      }, 300);
-    } else {
-      // For iOS or when not preventing navigation:
-      // Show modal immediately
-      setSelectedOrderId(orderId);
-      setModalVisible(true);
-      modalOpenedTimestamp.current = Date.now();
+        console.log(`${Platform.OS}: Order modal displayed normally`);
+      }
+    } catch (error) {
+      console.error(`${Platform.OS}: Error in showOrderModal:`, error);
       
-      console.log(`${Platform.OS}: Order modal displayed normally`);
+      // Attempt recovery
+      try {
+        setSelectedOrderId(orderId);
+        setModalVisible(true);
+      } catch (recoveryError) {
+        console.error(`${Platform.OS}: Recovery failed:`, recoveryError);
+      }
     }
   };
 

@@ -152,56 +152,68 @@ export default function NotificationBell() {
   };
 
   const handleNotificationPress = (id: string, data?: Record<string, any>) => {
-    dispatch(markAsRead(id));
-    console.log(`${Platform.OS}: Notification pressed in NotificationBell:`, { id, data });
+    try {
+      dispatch(markAsRead(id));
+      console.log(`${Platform.OS}: Notification pressed in NotificationBell:`, { id, data });
 
-    // Check if this is an order notification
-    if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
-      console.log(`${Platform.OS}: Order notification detected, orderId:`, data.orderId);
-      
-      // First close the notifications modal
-      setModalVisible(false);
-      
-      // Mark this notification as clicked and add platform-specific flags
-      data.clicked = true;
-      
-      // Determine if we need to prevent navigation (always on Android)
-      const shouldPreventNavigation = Platform.OS === 'android';
-      if (shouldPreventNavigation) {
-        console.log(`${Platform.OS}: Setting preventNavigation flag for Android`);
-        data.preventNavigation = true;
+      // Guard against invalid or missing data
+      if (!data) {
+        console.log(`${Platform.OS}: Notification data is missing, cannot show modal`);
+        setModalVisible(false);
+        return;
       }
-      
-      // Give the modal time to dismiss before showing order modal
-      setTimeout(() => {
-        // Use the OrderModalContext to show the order details
-        showOrderModal(data.orderId, shouldPreventNavigation);
-      }, Platform.OS === 'android' ? 300 : 100);
-    } else if (data?.orderId) {
-      console.log(`${Platform.OS}: Generic order notification detected, orderId:`, data.orderId);
-      
-      // Close the notifications modal first
-      setModalVisible(false);
-      
-      // Handle platform-specific behavior
-      const shouldPreventNavigation = Platform.OS === 'android';
-      
-      // Mark this notification as clicked
-      if (data) {
-        data.clicked = true;
+
+      // Check if this is an order notification that should trigger a modal
+      if (data.orderId) {
+        const isOrderUpdate = (data.type === 'orderUpdate' || data.type === 'orderPlaced');
+        console.log(`${Platform.OS}: ${isOrderUpdate ? 'Order' : 'Generic'} notification detected, orderId:`, data.orderId);
         
-        // Add prevention flag for Android
-        if (shouldPreventNavigation) {
-          console.log(`${Platform.OS}: Setting preventNavigation flag for Android generic notification`);
-          data.preventNavigation = true;
+        // First close the notifications modal
+        setModalVisible(false);
+        
+        // Deep copy the data to avoid proxy issues
+        let safeData: Record<string, any>;
+        try {
+          safeData = JSON.parse(JSON.stringify(data));
+        } catch (copyError) {
+          console.error(`${Platform.OS}: Error copying notification data:`, copyError);
+          // Create a minimal safe copy
+          safeData = { 
+            orderId: data.orderId,
+            type: data.type || 'orderUpdate'
+          };
         }
+        
+        // Mark this notification as clicked and add platform-specific flags
+        safeData.clicked = true;
+        
+        // Determine if we need to prevent navigation (always on Android)
+        const shouldPreventNavigation = Platform.OS === 'android';
+        if (shouldPreventNavigation) {
+          console.log(`${Platform.OS}: Setting preventNavigation flag for Android`);
+          safeData.preventNavigation = true;
+        }
+        
+        // For Android, give more time for the modal to dismiss 
+        const delay = Platform.OS === 'android' ? 400 : 100;
+        
+        // Give the modal time to dismiss before showing order modal
+        setTimeout(() => {
+          try {
+            // Use the OrderModalContext to show the order details
+            console.log(`${Platform.OS}: Showing order modal for order:`, safeData.orderId);
+            
+            // SafeData contains copies of all notification data plus our flags
+            showOrderModal(safeData.orderId, shouldPreventNavigation);
+          } catch (error) {
+            console.error(`${Platform.OS}: Error showing order modal:`, error);
+          }
+        }, delay);
       }
-      
-      // Give the modal time to dismiss before showing order modal
-      setTimeout(() => {
-        // Use the OrderModalContext to show the order details
-        showOrderModal(data.orderId, shouldPreventNavigation);
-      }, Platform.OS === 'android' ? 300 : 100);
+    } catch (error) {
+      console.error(`${Platform.OS}: Error handling notification press:`, error);
+      // Close the modal regardless of error
+      setModalVisible(false);
     }
   };
 

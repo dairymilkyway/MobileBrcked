@@ -27,7 +27,37 @@ const saveNotificationsToStorage = async (notifications: Notification[]) => {
   try {
     const userId = await AsyncStorage.getItem('userId');
     if (userId) {
-      await AsyncStorage.setItem(`notifications_${userId}`, JSON.stringify(notifications));
+      // Create a deep copy without the proxy
+      const safeNotifications = notifications.map(notification => {
+        // Use a plain object to avoid proxy issues
+        const plainData = notification.data ? 
+          // Handle data safely with a try-catch
+          (() => {
+            try {
+              // Convert to JSON and back to remove proxy
+              return JSON.parse(JSON.stringify(notification.data));
+            } catch (error) {
+              console.log('Error converting notification data:', error);
+              // Return a minimal object with just the orderId if parsing fails
+              return { orderId: notification.data.orderId };
+            }
+          })() : 
+          undefined;
+        
+        // Return a plain object copy
+        return {
+          id: String(notification.id),
+          title: String(notification.title || ''),
+          body: String(notification.body || ''),
+          read: Boolean(notification.read),
+          createdAt: Number(notification.createdAt),
+          data: plainData
+        };
+      });
+      
+      // Store as JSON string
+      await AsyncStorage.setItem(`notifications_${userId}`, JSON.stringify(safeNotifications));
+      console.log(`Saved ${safeNotifications.length} notifications to storage for user ${userId}`);
     }
   } catch (error) {
     console.error('Error saving notifications to storage:', error);
@@ -48,59 +78,99 @@ export const notificationSlice = createSlice({
     },
     
     addNotification: (state, action: PayloadAction<Omit<Notification, 'id' | 'read' | 'createdAt'>>) => {
-      // Check if this is an order update notification with orderId and status
-      const isOrderUpdate = action.payload.data?.type === 'orderUpdate' && 
-                            action.payload.data?.orderId && 
-                            action.payload.data?.status;
-      
-      // If this is an order update, check for duplicates
-      if (isOrderUpdate) {
-        const orderId = action.payload.data?.orderId;
-        const status = action.payload.data?.status;
+      try {
+        // Ensure we have valid title and body
+        const title = action.payload.title || 'Notification';
+        const body = action.payload.body || '';
         
-        // Look for existing notifications for the same order with the same status
-        const existingNotificationIndex = state.notifications.findIndex(n => 
-          n.data?.orderId === orderId && 
-          n.data?.status === status &&
-          n.data?.type === 'orderUpdate'
-        );
-        
-        if (existingNotificationIndex !== -1) {
-          // Update the existing notification instead of adding a new one
-          state.notifications[existingNotificationIndex] = {
-            ...state.notifications[existingNotificationIndex],
-            title: action.payload.title,
-            body: action.payload.body,
-            data: action.payload.data,
-            createdAt: Date.now(), // Update timestamp
-          };
-          
-          // Save to AsyncStorage
-          saveNotificationsToStorage(state.notifications);
-          
-          // Don't increment unread count since it's just an update
-          return;
+        // Safely handle data object
+        let safeData: Record<string, any> | undefined = undefined;
+        if (action.payload.data) {
+          try {
+            // Create a safe copy of the data by serializing and deserializing
+            safeData = JSON.parse(JSON.stringify(action.payload.data));
+          } catch (error) {
+            console.error('Error processing notification data:', error);
+            
+            // Create a minimal data object if serialization fails
+            if (action.payload.data.orderId) {
+              safeData = { orderId: action.payload.data.orderId };
+              
+              // Add other important properties if they exist
+              if (action.payload.data.type) {
+                safeData.type = String(action.payload.data.type);
+              }
+              if (action.payload.data.status) {
+                safeData.status = String(action.payload.data.status);
+              }
+            }
+          }
         }
+        
+        // Check if this is an order update notification with orderId and status
+        const isOrderUpdate = 
+          safeData !== undefined && 
+          safeData.type === 'orderUpdate' && 
+          safeData.orderId && 
+          safeData.status;
+        
+        // If this is an order update, check for duplicates
+        if (isOrderUpdate && safeData) {
+          const orderId = safeData.orderId;
+          const status = safeData.status;
+          
+          // Look for existing notifications for the same order with the same status
+          const existingNotificationIndex = state.notifications.findIndex(n => 
+            n.data?.orderId === orderId && 
+            n.data?.status === status &&
+            n.data?.type === 'orderUpdate'
+          );
+          
+          if (existingNotificationIndex !== -1) {
+            // Update the existing notification instead of adding a new one
+            state.notifications[existingNotificationIndex] = {
+              ...state.notifications[existingNotificationIndex],
+              title,
+              body,
+              data: safeData,
+              createdAt: Date.now(), // Update timestamp
+            };
+            
+            // Save to AsyncStorage
+            saveNotificationsToStorage(state.notifications);
+            
+            // Don't increment unread count since it's just an update
+            return;
+          }
+        }
+        
+        // Generate a unique ID using timestamp and a random number for uniqueness
+        const uniqueId = `${Date.now()}-${Math.floor(Math.random() * 1000)}`;
+        
+        // Create a new notification with the sanitized data
+        const newNotification: Notification = {
+          id: uniqueId,
+          title,
+          body,
+          data: safeData,
+          read: false,
+          createdAt: Date.now(),
+        };
+        
+        // Add the notification to the state
+        state.notifications.unshift(newNotification);
+        state.unreadCount += 1;
+        
+        // Only keep the 20 most recent notifications
+        if (state.notifications.length > 20) {
+          state.notifications = state.notifications.slice(0, 20);
+        }
+        
+        // Save to AsyncStorage
+        saveNotificationsToStorage(state.notifications);
+      } catch (error) {
+        console.error('Error in addNotification reducer:', error);
       }
-      
-      // Otherwise, add as a new notification
-      const newNotification: Notification = {
-        id: Date.now().toString(),
-        ...action.payload,
-        read: false,
-        createdAt: Date.now(),
-      };
-      
-      state.notifications.unshift(newNotification);
-      state.unreadCount += 1;
-      
-      // Only keep the 20 most recent notifications
-      if (state.notifications.length > 20) {
-        state.notifications = state.notifications.slice(0, 20);
-      }
-      
-      // Save to AsyncStorage
-      saveNotificationsToStorage(state.notifications);
     },
     
     markAsRead: (state, action: PayloadAction<string>) => {
@@ -139,14 +209,52 @@ export const notificationSlice = createSlice({
 export const loadNotificationsFromStorage = async () => {
   try {
     const userId = await AsyncStorage.getItem('userId');
-    if (userId) {
-      const storedNotificationsStr = await AsyncStorage.getItem(`notifications_${userId}`);
-      if (storedNotificationsStr) {
-        const storedNotifications = JSON.parse(storedNotificationsStr) as Notification[];
-        return storedNotifications;
-      }
+    if (!userId) {
+      console.log('No userId found for loading notifications');
+      return null;
     }
-    return null;
+    
+    const storageKey = `notifications_${userId}`;
+    const storedNotificationsStr = await AsyncStorage.getItem(storageKey);
+    
+    if (!storedNotificationsStr) {
+      console.log(`No stored notifications found for user ${userId}`);
+      return null;
+    }
+    
+    try {
+      const storedNotifications = JSON.parse(storedNotificationsStr) as Notification[];
+      
+      // Validate the data structure
+      if (!Array.isArray(storedNotifications)) {
+        console.error('Stored notifications is not an array, resetting storage');
+        await AsyncStorage.removeItem(storageKey);
+        return null;
+      }
+      
+      // Filter out any invalid notifications
+      const validNotifications = storedNotifications.filter(notification => {
+        return notification && 
+               typeof notification === 'object' && 
+               notification.id && 
+               notification.title;
+      });
+      
+      // If we lost notifications during validation, save the valid ones back
+      if (validNotifications.length !== storedNotifications.length) {
+        console.log(`Filtered out ${storedNotifications.length - validNotifications.length} invalid notifications`);
+        // Save the valid notifications back to storage
+        await AsyncStorage.setItem(storageKey, JSON.stringify(validNotifications));
+      }
+      
+      console.log(`Successfully loaded ${validNotifications.length} notifications for user ${userId}`);
+      return validNotifications;
+    } catch (parseError) {
+      console.error('Error parsing stored notifications:', parseError);
+      // If we can't parse the data, clear it
+      await AsyncStorage.removeItem(storageKey);
+      return null;
+    }
   } catch (error) {
     console.error('Error loading notifications from storage:', error);
     return null;

@@ -566,6 +566,12 @@ export default function RootLayout() {
     // Check if app was opened from a notification
     const getInitialNotification = async () => {
       try {
+        // Give the router some time to initialize first
+        if (Platform.OS === 'android') {
+          // On Android, we need a bit more time to ensure navigation is ready
+          await new Promise(resolve => setTimeout(resolve, 500));
+        }
+        
         const response = await Notifications.getLastNotificationResponseAsync();
         
         // If app was opened from a notification, process it
@@ -583,32 +589,41 @@ export default function RootLayout() {
             // Platform specific handling
             const isAndroid = Platform.OS === 'android';
             
-            // Prepare notification data with platform-specific flags
-            const notificationData = {
-              ...data,
-              type: data.type || 'orderUpdate',
-              orderId: data.orderId,
-              showModal: true,       // This flag indicates the modal should be shown
-              clicked: true,         // Add explicit clicked flag 
-              preventNavigation: isAndroid, // Prevent navigation on Android
-              timestamp: Date.now()  // Add timestamp for uniqueness
-            };
-            
-            console.log(`${Platform.OS}: Setting preventNavigation=${isAndroid} for initial notification`);
-            
-            // We need to delay this slightly to ensure the store is ready
-            // Use different delays based on platform
-            setTimeout(() => {
-              store.dispatch(
-                addNotification({
-                  title: response.notification.request.content.title || 'Order Update',
-                  body: response.notification.request.content.body || 'Your order has been updated',
-                  data: notificationData
-                })
-              );
+            try {
+              // Prepare notification data with platform-specific flags
+              const notificationData = {
+                ...data,
+                type: data.type || 'orderUpdate',
+                orderId: data.orderId,
+                showModal: true,       // This flag indicates the modal should be shown
+                clicked: true,         // Add explicit clicked flag 
+                preventNavigation: isAndroid, // Prevent navigation on Android
+                timestamp: Date.now()  // Add timestamp for uniqueness
+              };
               
-              console.log(`${Platform.OS}: Added initial order notification with preventNavigation=${isAndroid}`);
-            }, isAndroid ? 1500 : 800); // Much longer delay on Android to ensure router has settled
+              console.log(`${Platform.OS}: Setting preventNavigation=${isAndroid} for initial notification`);
+              
+              // We need to delay this slightly to ensure the store is ready
+              // Use different delays based on platform
+              setTimeout(() => {
+                try {
+                  console.log(`${Platform.OS}: Dispatching notification to store`);
+                  store.dispatch(
+                    addNotification({
+                      title: response.notification.request.content.title || 'Order Update',
+                      body: response.notification.request.content.body || 'Your order has been updated',
+                      data: notificationData
+                    })
+                  );
+                  
+                  console.log(`${Platform.OS}: Added initial order notification with preventNavigation=${isAndroid}`);
+                } catch (dispatchError) {
+                  console.error(`${Platform.OS}: Error dispatching notification:`, dispatchError);
+                }
+              }, isAndroid ? 2000 : 800); // Longer delay on Android to ensure router has settled
+            } catch (dataError) {
+              console.error(`${Platform.OS}: Error preparing notification data:`, dataError);
+            }
           }
         }
       } catch (error) {
