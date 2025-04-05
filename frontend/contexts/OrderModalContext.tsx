@@ -117,23 +117,29 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   // Listen for new notifications that might contain order updates
   useEffect(() => {
     if (notifications.length > 0) {
+      // Get the latest notification
       const latestNotification = notifications[0];
-      console.log(`${Platform.OS}: Latest notification:`, {
-        id: latestNotification.id,
-        title: latestNotification.title,
-        read: latestNotification.read,
-        dataType: latestNotification.data?.type,
-        orderId: latestNotification.data?.orderId,
-        showModal: latestNotification.data?.showModal,
-        preventNavigation: latestNotification.data?.preventNavigation,
-        source: latestNotification.data?.source,
-        clicked: latestNotification.data?.clicked
-      });
+      console.log(`${Platform.OS}: Checking notification in OrderModalContext:`, 
+        latestNotification.title, 
+        latestNotification.data?.type,
+        latestNotification.data?.orderId
+      );
+      
+      // Add specific logging for order placed notifications
+      if (latestNotification.data?.type === 'orderPlaced' && latestNotification.data?.orderId) {
+        console.log(`${Platform.OS}: ORDER PLACED notification detected in OrderModalContext:`, {
+          orderId: latestNotification.data.orderId,
+          clicked: latestNotification.data?.clicked,
+          showModal: latestNotification.data?.showModal
+        });
+      }
       
       // Only open modal if notification was explicitly clicked (handled in NotificationBell)
       if (latestNotification.data?.clicked && 
           (latestNotification.data?.type === 'orderUpdate' || latestNotification.data?.type === 'orderPlaced') && 
           latestNotification.data?.orderId) {
+        
+        console.log(`${Platform.OS}: Order notification was clicked - type: ${latestNotification.data.type}, orderId: ${latestNotification.data.orderId}`);
         
         // Check if we should prevent navigation
         const shouldPreventNavigation = latestNotification.data?.preventNavigation === true || 
@@ -145,10 +151,12 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         if (Platform.OS === 'android') {
           setTimeout(() => {
             if (latestNotification.data?.orderId) {
+              console.log(`${Platform.OS}: Showing modal for ${latestNotification.data.type} notification after delay`);
               showOrderModal(latestNotification.data.orderId, shouldPreventNavigation);
             }
           }, 300);
         } else {
+          console.log(`${Platform.OS}: Immediately showing modal for ${latestNotification.data.type} notification`);
           showOrderModal(latestNotification.data.orderId, shouldPreventNavigation);
         }
       }

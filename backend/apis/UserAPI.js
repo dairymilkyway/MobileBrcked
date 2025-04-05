@@ -334,7 +334,10 @@ router.delete('/remove-push-token', authenticateToken, async (req, res) => {
     const userId = req.user.id;
     const { pushToken } = req.body;
 
+    console.log(`Push token removal request for user ${userId}`);
+
     if (!pushToken) {
+      console.log('Push token removal failed: No token provided');
       return res.status(400).json({
         success: false,
         message: 'Push token is required'
@@ -344,6 +347,7 @@ router.delete('/remove-push-token', authenticateToken, async (req, res) => {
     // Find user
     const user = await User.findById(userId);
     if (!user) {
+      console.log(`Push token removal failed: User ${userId} not found`);
       return res.status(404).json({
         success: false,
         message: 'User not found'
@@ -352,11 +356,13 @@ router.delete('/remove-push-token', authenticateToken, async (req, res) => {
 
     // Store the original count to check if anything was removed
     const originalCount = user.pushTokens ? user.pushTokens.length : 0;
+    console.log(`User ${userId} has ${originalCount} push tokens before removal`);
     
-    // Check if removePushToken method exists
+    // Attempt to remove the specific token
     if (typeof user.removePushToken === 'function') {
       // Use the method if it exists
       user.removePushToken(pushToken);
+      console.log(`Removed push token using model method for user ${userId}`);
     } else {
       // Fallback implementation if the method doesn't exist
       console.log('removePushToken method not found, using fallback implementation');
@@ -374,14 +380,47 @@ router.delete('/remove-push-token', authenticateToken, async (req, res) => {
     
     // Handle old schema as well - if pushToken field exists
     if (user.pushToken !== undefined && user.pushToken === pushToken) {
-      console.log('Found matching token in old pushToken field, clearing it');
+      console.log(`Found matching token in old pushToken field for user ${userId}, clearing it`);
       user.pushToken = null;
     }
     
     // Save the user with updated pushTokens
     await user.save();
     
-    const tokensRemoved = originalCount - (user.pushTokens ? user.pushTokens.length : 0);
+    // Verify token was actually removed
+    const updatedUser = await User.findById(userId);
+    if (!updatedUser) {
+      console.log(`Verification failed: Could not find user ${userId} after token removal`);
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to verify token removal'
+      });
+    }
+    
+    const newCount = updatedUser.pushTokens ? updatedUser.pushTokens.length : 0;
+    const tokensRemoved = originalCount - newCount;
+
+    // Double-check if the specific token still exists
+    const tokenStillExists = updatedUser.pushTokens && 
+                             updatedUser.pushTokens.some(item => item && item.token === pushToken);
+    
+    if (tokenStillExists) {
+      console.log(`WARNING: Token still exists for user ${userId} after removal attempt`);
+      
+      // Try a more direct approach as fallback
+      try {
+        console.log(`Attempting direct database update for user ${userId}`);
+        await User.updateOne(
+          { _id: userId },
+          { $pull: { pushTokens: { token: pushToken } } }
+        );
+        console.log(`Direct update completed for user ${userId}`);
+      } catch (directUpdateError) {
+        console.error(`Direct update failed for user ${userId}:`, directUpdateError);
+      }
+    } else {
+      console.log(`Token successfully removed for user ${userId}`);
+    }
 
     console.log(`${tokensRemoved} push tokens removed for user ${userId}`);
 
@@ -390,7 +429,7 @@ router.delete('/remove-push-token', authenticateToken, async (req, res) => {
       message: `${tokensRemoved} push tokens removed successfully`
     });
   } catch (error) {
-    console.error('Error removing push token:', error);
+    console.error(`Error removing push token:`, error);
     res.status(500).json({
       success: false,
       message: 'Failed to remove push token',

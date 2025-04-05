@@ -40,14 +40,27 @@ Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     const data = notification.request.content.data;
     
-    // Always show notifications as banners without alerts
-    const shouldForce = data && (data.forceShow || data.type === 'orderUpdate' || data.immediate);
+    // Check specifically for orderPlaced or orderUpdate type
+    const isOrderPlaced = data && data.type === 'orderPlaced';
+    const isOrderUpdate = data && data.type === 'orderUpdate';
+    const isOrderNotification = isOrderPlaced || isOrderUpdate;
+    
+    // Always show these notifications with high priority
+    const shouldForce = data && (data.forceShow || isOrderNotification || data.immediate);
+    
+    console.log(`Notification handler - data:`, JSON.stringify(data));
+    console.log(`Notification handler - isOrderPlaced: ${isOrderPlaced}, isOrderUpdate: ${isOrderUpdate}, shouldForce: ${shouldForce}`);
+    
+    // Set highest priority for order placed notifications
+    const priority = isOrderPlaced ? 
+      Notifications.AndroidNotificationPriority.MAX : 
+      (shouldForce ? Notifications.AndroidNotificationPriority.HIGH : Notifications.AndroidNotificationPriority.DEFAULT);
     
     return {
       shouldShowAlert: true,  // This controls the banner-style notification, not Alert.alert
       shouldPlaySound: true,  // Keep sound
       shouldSetBadge: true,   // Keep badge
-      priority: shouldForce ? Notifications.AndroidNotificationPriority.MAX : Notifications.AndroidNotificationPriority.HIGH,
+      priority: priority,
       // On iOS, ensure presentation options
       iOS: {
         sound: true,
@@ -70,10 +83,15 @@ function NotificationSetup() {
   const handleNotificationResponse = (response: Notifications.NotificationResponse) => {
     const data = response.notification.request.content.data;
     
-    // Check if this is an order notification
+    // Check if this is an order notification (update or placed)
+    const isOrderUpdate = data?.type === 'orderUpdate' && data?.orderId;
+    const isOrderPlaced = data?.type === 'orderPlaced' && data?.orderId;
+    
+    console.log(`${Platform.OS}: Notification response received - isOrderUpdate: ${isOrderUpdate}, isOrderPlaced: ${isOrderPlaced}`);
+    
     // This is ONLY triggered when a notification is explicitly clicked by the user
-    if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
-      console.log(`${Platform.OS}: Notification response for order:`, data.orderId);
+    if ((isOrderUpdate || isOrderPlaced) && data?.orderId) {
+      console.log(`${Platform.OS}: Order notification (${data.type}) response for order:`, data.orderId);
       
       // Set the preventNavigation flag for Android devices
       const shouldPreventNavigation = Platform.OS === 'android';
@@ -84,26 +102,18 @@ function NotificationSetup() {
         type: data.type || 'orderUpdate',
         orderId: data.orderId,
         showModal: true,       // This flag indicates the modal should be shown
-        clicked: true,         // Add explicit clicked flag
-        preventNavigation: shouldPreventNavigation, // Prevent navigation on Android
-        timestamp: Date.now()  // Add timestamp for uniqueness
+        clicked: true,         // Add explicit clicked flag 
+        preventNavigation: shouldPreventNavigation,
+        timestamp: Date.now()  // Add current timestamp for uniqueness
       };
       
-      console.log(`${Platform.OS}: Setting preventNavigation=${shouldPreventNavigation} for notification`);
-      
-      // Give a short delay to allow any UI to settle first
-      setTimeout(() => {
-        // Add a notification to the Redux store, which will trigger the UI to show the order details modal
-        dispatch(
-          addNotification({
-            title: response.notification.request.content.title || 'Order Update',
-            body: response.notification.request.content.body || 'Your order has been updated',
-            data: notificationData
-          })
-        );
-        
-        console.log(`${Platform.OS}: Notification clicked for order:`, data.orderId);
-      }, Platform.OS === 'android' ? 200 : 0);
+      // Add to Redux for handling by OrderModalContext
+      console.log(`${Platform.OS}: Dispatching clicked ${data.type} notification to Redux`);
+      dispatch(addNotification({
+        title: response.notification.request.content.title || 'Order Update',
+        body: response.notification.request.content.body || 'Your order has been updated',
+        data: notificationData
+      }));
     }
   };
 
@@ -477,22 +487,52 @@ function NotificationSetup() {
       const { title, body, data } = notification.request.content;
       console.log('Received notification:', { title, body, data });
       
-      // Only add to Redux store if it's not an order update or doesn't have orderId/status
-      // This prevents multiple Redux entries for the same notification
+      // Check if this is an order update or order placed notification
       const isOrderUpdate = data && data.type === 'orderUpdate' && data.orderId && data.status;
+      const isOrderPlaced = data && data.type === 'orderPlaced' && data.orderId;
+      const isOrderNotification = isOrderUpdate || isOrderPlaced;
       
-      if (title && !isOrderUpdate) {
-        // For order updates, we'll rely on the direct methods to add to Redux
-        // Only add non-order updates to Redux through listener
-        dispatch(addNotification({
-          title: title || 'New Notification',
-          body: body || '',
-          data: {
-            ...data as Record<string, any>,
-            source: 'listener',  // Mark the source
-            showModal: true // Add this flag for the OrderModalContext
-          }
-        }));
+      console.log(`Notification received - isOrderUpdate: ${isOrderUpdate}, isOrderPlaced: ${isOrderPlaced}`);
+      
+      if (title) {
+        // For order placed notifications, log even more details
+        if (isOrderPlaced) {
+          console.log('ORDER PLACED NOTIFICATION RECEIVED:', {
+            orderId: data.orderId,
+            title,
+            body,
+            timestamp: Date.now(),
+            type: data.type
+          });
+          
+          // Always dispatch order placed notifications with high importance flags
+          dispatch(addNotification({
+            title: title || 'Order Placed',
+            body: body || 'Your order was placed successfully!',
+            data: {
+              ...data as Record<string, any>,
+              source: 'listener',
+              showModal: true,
+              clicked: false,
+              forceShow: true,
+              immediate: true,
+              timestamp: Date.now(),
+              uniqueId: `order-placed-${data.orderId}-${Date.now()}`
+            }
+          }));
+        } else {
+          // For other notifications, use standard dispatch
+          dispatch(addNotification({
+            title: title || 'New Notification',
+            body: body || '',
+            data: {
+              ...data as Record<string, any>,
+              source: 'listener',  // Mark the source
+              showModal: isOrderNotification, // Only show modal for order notifications
+              clicked: false // Not clicked yet, just received
+            }
+          }));
+        }
       }
       
       // Remove Alert.alert for notifications - we only want the banner notifications
@@ -527,13 +567,41 @@ export const handleLogout = async (redirectToLogin = true, dispatch: AppDispatch
     // Get the user token and role for logging
     const userToken = await AsyncStorage.getItem('userToken');
     const userRole = await AsyncStorage.getItem('userRole');
+    const pushToken = await AsyncStorage.getItem('pushToken');
+    
     console.log('Logout - User token exists:', !!userToken);
     console.log('Logout - User role:', userRole);
+    console.log('Logout - Push token exists:', !!pushToken);
     
     // First try to unregister push token before the user token is removed
     // so the API call can still be authenticated
     console.log('Unregistering push token...');
-    await removePushTokenOnLogout();
+    try {
+      await removePushTokenOnLogout();
+    } catch (pushTokenError) {
+      // Log but continue with logout even if token removal fails
+      console.error('Push token removal failed:', pushTokenError);
+      console.log('Continuing with logout despite push token removal failure');
+      
+      // Backup: Try direct call to remove-push-token if the helper function fails
+      if (userToken && pushToken) {
+        try {
+          console.log('Attempting direct call to remove push token as backup');
+          await axios.delete(`${API_BASE_URL}/users/remove-push-token`, {
+            headers: {
+              'Authorization': `Bearer ${userToken}`,
+              'Content-Type': 'application/json'
+            },
+            data: { pushToken },
+            timeout: 3000
+          });
+          console.log('Backup push token removal successful');
+        } catch (backupError: any) {
+          console.error('Backup push token removal failed:', backupError.message);
+          // Continue with logout regardless
+        }
+      }
+    }
     
     // Try to call the logout API if we have a token
     if (userToken) {

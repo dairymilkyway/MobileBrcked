@@ -203,10 +203,70 @@ initDatabases().then(() => {
       const authHeader = req.headers['authorization'];
       const token = authHeader.startsWith('Bearer ') ? authHeader.substring(7) : authHeader;
       
+      // Get user data from the token
+      const userId = req.user.id;
+      console.log(`Logout initiated for user ${userId}`);
+      
+      // IMPORTANT: Remove push tokens from database
+      try {
+        console.log(`Attempting to remove all push tokens for user ${userId} from database`);
+        
+        // Find user by ID
+        const user = await User.findById(userId);
+        
+        if (!user) {
+          console.error(`User ${userId} not found when removing push tokens during logout`);
+        } else {
+          // Count tokens before removal
+          const tokenCount = user.pushTokens ? user.pushTokens.length : 0;
+          
+          if (tokenCount > 0) {
+            console.log(`Found ${tokenCount} push tokens to remove for user ${userId}`);
+            
+            // Clear all push tokens
+            user.pushTokens = [];
+            
+            // Also clear legacy token field if it exists
+            if (user.pushToken !== undefined) {
+              user.pushToken = null;
+            }
+            
+            // Save the user with cleared push tokens
+            const saveResult = await user.save();
+            
+            // Verify that tokens were removed
+            if (saveResult.pushTokens && saveResult.pushTokens.length > 0) {
+              console.error(`Failed to remove push tokens for user ${userId}. ${saveResult.pushTokens.length} tokens still remain.`);
+            } else {
+              console.log(`Successfully removed all push tokens for user ${userId}`);
+            }
+          } else {
+            console.log(`No push tokens found for user ${userId}`);
+          }
+        }
+      } catch (tokenError) {
+        console.error(`Error removing push tokens for user ${userId} during logout:`, tokenError);
+        // Try one more time with a different approach
+        try {
+          console.log(`Attempting direct database update for user ${userId}`);
+          // Direct update approach as fallback
+          const updateResult = await User.updateOne(
+            { _id: userId },
+            { $set: { pushTokens: [], pushToken: null } }
+          );
+          console.log(`Direct update result: ${JSON.stringify(updateResult)}`);
+        } catch (retryError) {
+          console.error(`Retry attempt to remove tokens failed:`, retryError);
+        }
+      }
+      
       // Blacklist the token in SQLite
       await blacklistToken(token);
+      
+      console.log(`Logout successful for user ${userId}`);
       res.json({ message: 'Logged out successfully' });
     } catch (err) {
+      console.error('Error in logout process:', err);
       res.status(500).json({ error: err.message });
     }
   });

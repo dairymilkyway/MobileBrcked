@@ -325,7 +325,7 @@ export const loginUser = async (email: string, password: string) => {
   try {
     console.log('Attempting login with:', email);
     
-    const response = await fetch(`${API_BASE_URL}/api/login`, {
+    const response = await fetch(`${API_BASE_URL}/login`, {
       method: 'POST',
       headers: {
         'Content-Type': 'application/json',
@@ -367,7 +367,7 @@ export const logout = async () => {
     if (token) {
       try {
         // Call the server-side logout endpoint to blacklist the token
-        const response = await fetch(`${API_BASE_URL}/api/logout`, {
+        const response = await fetch(`${API_BASE_URL}/logout`, {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,

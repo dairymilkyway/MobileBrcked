@@ -286,13 +286,19 @@ export const removePushTokenOnLogout = async () => {
     try {
       // Notify server to remove the token
       console.log(`Attempting to remove push token from server: ${API_BASE_URL}/users/remove-push-token`);
+      const controller = new AbortController();
+      const timeoutId = setTimeout(() => controller.abort(), 5000); // 5 second timeout
+      
       const response = await axios.delete(`${API_BASE_URL}/users/remove-push-token`, {
         headers: {
           'Authorization': `Bearer ${userToken}`,
           'Content-Type': 'application/json'
         },
-        data: { pushToken: token }
+        data: { pushToken: token },
+        signal: controller.signal
       });
+      
+      clearTimeout(timeoutId);
       
       console.log('Push token removal response status:', response.status);
       
@@ -305,9 +311,11 @@ export const removePushTokenOnLogout = async () => {
       // If we get a 404, the endpoint might not exist yet, which is okay
       if (apiError.response && apiError.response.status === 404) {
         console.log('Token removal endpoint not found (404), continuing with logout...');
+      } else if (apiError.name === 'AbortError' || apiError.code === 'ECONNABORTED') {
+        console.log('Token removal request timed out, continuing with logout...');
       } else {
         console.error('Error calling remove-push-token API:', apiError.message);
-        console.error('Full error:', JSON.stringify(apiError));
+        console.log('Continuing with logout despite token removal error');
       }
     }
     
@@ -318,10 +326,13 @@ export const removePushTokenOnLogout = async () => {
     return true;
   } catch (error) {
     console.error('Error removing push token:', error.message);
-    console.error('Full error:', JSON.stringify(error));
     // Still clear local storage even if there was an error
-    await AsyncStorage.removeItem('pushToken');
-    await AsyncStorage.removeItem('tokenLastRegistered');
+    try {
+      await AsyncStorage.removeItem('pushToken');
+      await AsyncStorage.removeItem('tokenLastRegistered');
+    } catch (storageError) {
+      console.error('Error clearing token from storage:', storageError);
+    }
     return false;
   }
 };
@@ -445,8 +456,18 @@ export const registerBackgroundNotificationHandler = () => {
     try {
       console.log("Background notification task triggered with data:", data);
       
-      // Check if this is an order notification
-      if (data.type === 'orderUpdate' && data.orderId) {
+      // Check if this is an order notification (update or placed)
+      if ((data.type === 'orderUpdate' || data.type === 'orderPlaced') && data.orderId) {
+        console.log(`Background notification for ${data.type} received with orderId:`, data.orderId);
+        
+        if (data.type === 'orderPlaced') {
+          console.log("BACKGROUND ORDER PLACED NOTIFICATION RECEIVED:", {
+            orderId: data.orderId,
+            type: data.type,
+            timestamp: Date.now()
+          });
+        }
+        
         // Store the data for the app to handle when it opens
         const pendingOrders = await AsyncStorage.getItem('pendingOrderModals') || '[]';
         const orders = JSON.parse(pendingOrders);
@@ -455,13 +476,16 @@ export const registerBackgroundNotificationHandler = () => {
         if (!orders.some(order => order.orderId === data.orderId)) {
           orders.push({
             orderId: data.orderId,
-            status: data.status,
+            status: data.status || 'pending',
+            type: data.type,
             timestamp: Date.now(),
-            showModal: true
+            showModal: true,
+            forceShow: true,
+            immediate: true
           });
           
           await AsyncStorage.setItem('pendingOrderModals', JSON.stringify(orders));
-          console.log(`Added order ${data.orderId} to pending modals`);
+          console.log(`Added ${data.type} for order ${data.orderId} to pending modals`);
         }
       }
     } catch (error) {

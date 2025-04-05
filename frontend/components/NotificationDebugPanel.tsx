@@ -180,7 +180,7 @@ Last Registered: ${lastTimestamp}
       }
 
       // Get the most recent order for the current user
-      const response = await axios.get(`${API_BASE_URL}/api/orders/user`, {
+      const response = await axios.get(`${API_BASE_URL}/orders/user`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
@@ -253,7 +253,7 @@ Last Registered: ${lastTimestamp}
       console.log("Current push token:", pushToken);
 
       // Get the most recent order for the current user
-      const response = await axios.get(`${API_BASE_URL}/api/orders/user`, {
+      const response = await axios.get(`${API_BASE_URL}/orders/user`, {
         headers: {
           'Authorization': `Bearer ${token}`
         }
