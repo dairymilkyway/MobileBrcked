@@ -38,10 +38,33 @@ const sendPushNotification = async (pushToken, title, body, data = {}) => {
     sound: 'default',
     title,
     body,
-    data,
+    data: {
+      ...data,
+      title, // Include title and body in data for consistency
+      body,
+      orderId: data.orderId, // Ensure orderId is in the right place
+      status: data.status,
+      showModal: data.showModal || false
+    },
     priority: 'high', // Add high priority
     channelId: data.channelId || 'default', // Use channel from data or default
+    // Add iOS specific options
+    badge: 1,
+    // iOS specific configuration
+    _displayInForeground: true,
+    _contentAvailable: true,
   };
+  
+  // For iOS devices, we need to ensure the notification can be handled while app is in background
+  if (pushToken.startsWith('ExponentPushToken[')) {
+    message._contentAvailable = true;
+    message._mutableContent = true;
+    
+    // If this is an order notification, set the category for iOS action handling
+    if (data.type === 'orderUpdate') {
+      message._category = 'ORDER_UPDATE';
+    }
+  }
 
   // For Android, ensure the right channel is used
   if (data.channelId) {
@@ -129,7 +152,14 @@ const sendOrderStatusNotification = async (pushToken, orderId, status) => {
       status, 
       type: 'orderUpdate',
       importance: 'high',
-      channelId: 'order-updates'
+      channelId: 'order-updates',
+      showModal: true, // Add flag for modal to show when notification is tapped
+      forceShow: true,  // Ensure notification is shown even if app is in foreground
+      // Add additional metadata for iOS
+      _displayInForeground: true,
+      _contentAvailable: true,
+      _category: 'ORDER_UPDATE',
+      _mutableContent: true
     }
   );
 };

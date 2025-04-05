@@ -15,6 +15,7 @@ import { RootState } from '../redux/store';
 import { markAllAsRead, markAsRead, clearNotifications, addNotification } from '../redux/slices/notificationSlice';
 import { useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
+import { useOrderModal } from '@/contexts/OrderModalContext';
 
 // LEGO brand colors
 const LEGO_COLORS = {
@@ -42,6 +43,7 @@ export default function NotificationBell() {
   const { notifications, unreadCount } = useSelector((state: RootState) => state.notifications);
   const dispatch = useDispatch();
   const router = useRouter();
+  const { showOrderModal } = useOrderModal();
 
   // Helper function to render LEGO studs
   const renderStuds = (count: number) => {
@@ -74,14 +76,21 @@ export default function NotificationBell() {
 
   const handleNotificationPress = (id: string, data?: Record<string, any>) => {
     dispatch(markAsRead(id));
+    console.log('Notification pressed:', { id, data });
 
-    // Navigate to the relevant screen based on notification data
-    if (data?.orderId) {
-      // Close the modal first
+    // Check if this is an order notification
+    if (data?.type === 'orderUpdate' && data?.orderId) {
+      console.log('Order notification detected, orderId:', data.orderId);
+      // Close the notifications modal
       setModalVisible(false);
       
-      // Navigate to order details
-      router.push(`/orders?id=${data.orderId}`);
+      // Use the OrderModalContext to show the order details
+      showOrderModal(data.orderId);
+    } else if (data?.orderId) {
+      console.log('Generic order notification detected, orderId:', data.orderId);
+      // For backward compatibility with older notifications
+      setModalVisible(false);
+      showOrderModal(data.orderId);
     }
   };
 

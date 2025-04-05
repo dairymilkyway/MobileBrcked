@@ -10,12 +10,14 @@ import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Provider, useDispatch } from 'react-redux';
 import { store } from '../redux/store';
 import { Alert } from 'react-native';
-import { registerForPushNotifications, registerTokenWithServer, setupNotificationListeners } from '@/utils/notificationHelper';
+import { registerForPushNotifications, registerTokenWithServer, setupNotificationListeners, registerBackgroundNotificationHandler } from '@/utils/notificationHelper';
 import * as Notifications from 'expo-notifications';
 import { addNotification } from '@/redux/slices/notificationSlice';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_BASE_URL } from '@/env';
+import { useAppDispatch } from '@/redux/hooks';
+import { OrderModalProvider } from '@/contexts/OrderModalContext';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 
@@ -56,10 +58,35 @@ Notifications.setNotificationHandler({
 
 // Separate component for notification setup to use Redux hooks
 function NotificationSetup() {
-  const dispatch = useDispatch();
+  const dispatch = useAppDispatch();
   const pollingInterval = useRef<NodeJS.Timeout | null>(null);
   const lastOrderStatusesRef = useRef<Record<string, string>>({});
   const recentlyShownNotifications = useRef<Record<string, number>>({});
+
+  // Move the handleNotificationResponse function here, inside the component
+  const handleNotificationResponse = (response: Notifications.NotificationResponse) => {
+    const data = response.notification.request.content.data;
+    
+    // Check if this is an order notification
+    if ((data?.type === 'orderUpdate' && data?.orderId) || data?.orderId) {
+      // Add a notification to the Redux store, which will trigger the UI to show the order details modal
+      dispatch(
+        addNotification({
+          title: response.notification.request.content.title || 'Order Update',
+          body: response.notification.request.content.body || 'Your order status has changed',
+          data: {
+            ...data,
+            // Ensure it has the expected format for our NotificationBell component
+            type: data.type || 'orderUpdate',
+            orderId: data.orderId,
+            showModal: true // Add this flag to indicate the modal should be shown
+          }
+        })
+      );
+      
+      console.log('Notification clicked for order:', data.orderId);
+    }
+  };
 
   // Helper function to check if we've recently shown a notification for this order/status
   const hasRecentlyShownNotification = (orderId: string, status: string): boolean => {
@@ -138,7 +165,8 @@ function NotificationSetup() {
                     type: 'orderUpdate',
                     forceShow: true, // Special flag to force show the notification
                     immediate: true,  // Indicate this is an immediate notification
-                    source: 'polling'  // Track the source for debugging
+                    source: 'polling',  // Track the source for debugging
+                    showModal: true // Add this flag for the OrderModalContext
                   }
                 },
                 trigger: null // null means send immediately
@@ -152,7 +180,8 @@ function NotificationSetup() {
                   orderId, 
                   status: currentStatus, 
                   type: 'orderUpdate',
-                  source: 'polling'
+                  source: 'polling',
+                  showModal: true // Add this flag for the OrderModalContext
                 }
               }));
               
@@ -245,7 +274,8 @@ function NotificationSetup() {
                     forceShow: true,
                     immediate: true,
                     timestamp: Date.now(),
-                    source: 'recent-updates'
+                    source: 'recent-updates',
+                    showModal: true // Add this flag for the OrderModalContext
                   }
                 },
                 trigger: null // Send immediately
@@ -259,7 +289,8 @@ function NotificationSetup() {
                   orderId, 
                   status, 
                   type: 'orderUpdate',
-                  source: 'recent-updates'
+                  source: 'recent-updates',
+                  showModal: true // Add this flag for the OrderModalContext
                 }
               }));
               
@@ -339,7 +370,8 @@ function NotificationSetup() {
                     immediate: true,
                     receiptId: receipt._id,
                     timestamp: timestamp || Date.now(),
-                    source: 'receipt'
+                    source: 'receipt',
+                    showModal: true // Add this flag for the OrderModalContext
                   }
                 },
                 trigger: null // Send immediately
@@ -354,7 +386,8 @@ function NotificationSetup() {
                   status, 
                   type: 'orderUpdate', 
                   receiptId: receipt._id,
-                  source: 'receipt'
+                  source: 'receipt',
+                  showModal: true // Add this flag for the OrderModalContext
                 }
               }));
               
@@ -419,7 +452,7 @@ function NotificationSetup() {
     
     // Don't request permissions here anymore - permissions will be requested on login instead
     
-    // Set up notification listeners regardless of token registration
+    // Set up notification listeners
     const cleanupListeners = setupNotificationListeners((notification: Notifications.Notification) => {
       // Handle incoming notifications while the app is open
       const { title, body, data } = notification.request.content;
@@ -437,7 +470,8 @@ function NotificationSetup() {
           body: body || '',
           data: {
             ...data as Record<string, any>,
-            source: 'listener'  // Mark the source
+            source: 'listener',  // Mark the source
+            showModal: true // Add this flag for the OrderModalContext
           }
         }));
       }
@@ -445,6 +479,11 @@ function NotificationSetup() {
       // Remove Alert.alert for notifications - we only want the banner notifications
       // Do not show Alert dialogs anymore
     });
+
+    // Set up notification response handler for when users tap on notifications
+    const responseListener = Notifications.addNotificationResponseReceivedListener(
+      handleNotificationResponse
+    );
 
     // Clean up listeners and intervals when the component unmounts
     return () => {
@@ -454,6 +493,7 @@ function NotificationSetup() {
       clearInterval(receiptInterval);
       clearInterval(statusUpdateInterval);
       cleanupListeners();
+      Notifications.removeNotificationSubscription(responseListener);
     };
   }, [dispatch]);
 
@@ -469,7 +509,53 @@ export default function RootLayout() {
   useEffect(() => {
     if (loaded) {
       SplashScreen.hideAsync();
+      
+      // Register background notification handler
+      registerBackgroundNotificationHandler();
     }
+  }, [loaded]);
+
+  // Add this effect to check for notification that launched the app
+  useEffect(() => {
+    // Check if app was opened from a notification
+    const getInitialNotification = async () => {
+      try {
+        const response = await Notifications.getLastNotificationResponseAsync();
+        
+        // If app was opened from a notification, process it
+        if (response) {
+          console.log('App opened from notification:', response.notification.request.content);
+          
+          // Get the data from the notification
+          const data = response.notification.request.content.data;
+          
+          // If this is an order notification, add it to the store with the showModal flag
+          if ((data?.type === 'orderUpdate' && data?.orderId) || data?.orderId) {
+            console.log('Initial notification has order ID:', data.orderId);
+            
+            // We need to delay this slightly to ensure the store is ready
+            setTimeout(() => {
+              store.dispatch(
+                addNotification({
+                  title: response.notification.request.content.title || 'Order Update',
+                  body: response.notification.request.content.body || 'Your order status has changed',
+                  data: {
+                    ...data,
+                    type: data.type || 'orderUpdate',
+                    orderId: data.orderId,
+                    showModal: true // This is important to trigger the modal
+                  }
+                })
+              );
+            }, 1000);
+          }
+        }
+      } catch (error) {
+        console.error('Error checking initial notification:', error);
+      }
+    };
+    
+    getInitialNotification();
   }, [loaded]);
 
   if (!loaded) {
@@ -481,18 +567,20 @@ export default function RootLayout() {
       <GestureHandlerRootView style={{ flex: 1 }}>
         <ThemeProvider value={colorScheme === 'dark' ? DarkTheme : DefaultTheme}>
           <SafeAreaProvider>
-            <NotificationSetup />
-            <Stack>
-              <Stack.Screen name="index" options={{ headerShown: false }} />
-              <Stack.Screen name="Login" options={{ headerShown: false }} />
-              <Stack.Screen name="Register" options={{ headerShown: false }} />
-              <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
-              <Stack.Screen name="user" options={{ headerShown: false }} />
-              <Stack.Screen name="checkout" options={{ headerShown: false }} />
-              <Stack.Screen name="admin" options={{ headerShown: false }} />
-              <Stack.Screen name="+not-found" />
-            </Stack>
-            <StatusBar style="auto" />
+            <OrderModalProvider>
+              <NotificationSetup />
+              <Stack>
+                <Stack.Screen name="index" options={{ headerShown: false }} />
+                <Stack.Screen name="Login" options={{ headerShown: false }} />
+                <Stack.Screen name="Register" options={{ headerShown: false }} />
+                <Stack.Screen name="(tabs)" options={{ headerShown: false }} />
+                <Stack.Screen name="user" options={{ headerShown: false }} />
+                <Stack.Screen name="checkout" options={{ headerShown: false }} />
+                <Stack.Screen name="admin" options={{ headerShown: false }} />
+                <Stack.Screen name="+not-found" />
+              </Stack>
+              <StatusBar style="auto" />
+            </OrderModalProvider>
           </SafeAreaProvider>
         </ThemeProvider>
       </GestureHandlerRootView>

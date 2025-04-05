@@ -6,6 +6,7 @@ import {
   TouchableOpacity,
   Alert,
   Platform,
+  Button,
 } from 'react-native';
 import * as Notifications from 'expo-notifications';
 import { forceRegisterPushToken } from '@/utils/notificationHelper';
@@ -170,6 +171,52 @@ Last Registered: ${lastTimestamp}
     }
   };
 
+  const handleTestOrderModal = async () => {
+    try {
+      const token = await AsyncStorage.getItem('userToken');
+      if (!token) {
+        Alert.alert("Error", "You need to be logged in to test order notifications");
+        return;
+      }
+
+      // Get the most recent order for the current user
+      const response = await axios.get(`${API_BASE_URL}/api/orders/user`, {
+        headers: {
+          'Authorization': `Bearer ${token}`
+        }
+      });
+
+      if (!response.data.success || !response.data.data || response.data.data.length === 0) {
+        Alert.alert("No Orders Found", "You need to have at least one order to test the modal");
+        return;
+      }
+
+      // Use the first order from the response
+      const orderId = response.data.data[0].orderId;
+
+      // Call the test endpoint
+      const testResponse = await axios.post(
+        `${API_BASE_URL}/api/test/simulate-order-notification`,
+        { orderId },
+        {
+          headers: {
+            'Authorization': `Bearer ${token}`,
+            'Content-Type': 'application/json'
+          }
+        }
+      );
+
+      if (testResponse.data.success) {
+        Alert.alert("Success", "Order notification sent. Check your notifications.");
+      } else {
+        Alert.alert("Error", testResponse.data.message || "Failed to send test notification");
+      }
+    } catch (error) {
+      console.error('Error testing order modal notification:', error);
+      Alert.alert("Error", "Failed to send test order notification");
+    }
+  };
+
   return (
     <View style={styles.container}>
       <View style={styles.header}>
@@ -211,6 +258,12 @@ Last Registered: ${lastTimestamp}
         >
           <Text style={styles.buttonText}>Test Order Status Update</Text>
         </TouchableOpacity>
+        
+        <Button
+          title="Test Order Modal"
+          onPress={handleTestOrderModal}
+          color="#8E44AD"
+        />
       </View>
     </View>
   );

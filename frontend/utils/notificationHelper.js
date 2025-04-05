@@ -180,21 +180,12 @@ export const setupNotificationListeners = (onNotification) => {
     }
   });
 
-  // Handle notifications that are tapped by the user
-  const responseListener = Notifications.addNotificationResponseReceivedListener(response => {
-    const { notification } = response;
-    
-    // Here you can navigate to specific screens based on the notification data
-    if (notification.request.content.data.orderId) {
-      // Navigate to order details screen
-      // You would need to implement this navigation in your app
-    }
-  });
+  // We removed the response listener here because we're now handling it 
+  // directly in _layout.tsx to properly trigger the OrderDetailsModal
 
   // Return a cleanup function
   return () => {
     Notifications.removeNotificationSubscription(notificationListener);
-    Notifications.removeNotificationSubscription(responseListener);
   };
 };
 
@@ -259,10 +250,51 @@ export const forceRegisterPushToken = async () => {
   }
 };
 
+// Add this function to directly handle notification responses
+export const registerBackgroundNotificationHandler = () => {
+  // When app is in background, this taskName will be triggered
+  const BACKGROUND_NOTIFICATION_TASK = 'BACKGROUND_NOTIFICATION_TASK';
+
+  // Define the task that will run when a notification is opened from background
+  Notifications.registerTaskAsync(BACKGROUND_NOTIFICATION_TASK, async ({ data, error, executionInfo }) => {
+    if (error) {
+      console.error("Error in background notification task:", error);
+      return;
+    }
+
+    try {
+      console.log("Background notification task triggered with data:", data);
+      
+      // Check if this is an order notification
+      if (data.type === 'orderUpdate' && data.orderId) {
+        // Store the data for the app to handle when it opens
+        const pendingOrders = await AsyncStorage.getItem('pendingOrderModals') || '[]';
+        const orders = JSON.parse(pendingOrders);
+        
+        // Add this order to the pending list if not already there
+        if (!orders.some(order => order.orderId === data.orderId)) {
+          orders.push({
+            orderId: data.orderId,
+            status: data.status,
+            timestamp: Date.now(),
+            showModal: true
+          });
+          
+          await AsyncStorage.setItem('pendingOrderModals', JSON.stringify(orders));
+          console.log(`Added order ${data.orderId} to pending modals`);
+        }
+      }
+    } catch (error) {
+      console.error("Error processing background notification:", error);
+    }
+  });
+};
+
 export default {
   registerForPushNotifications,
   registerTokenWithServer,
   setupNotificationListeners,
   registerPushTokenAfterLogin,
   forceRegisterPushToken,
+  registerBackgroundNotificationHandler,
 }; 

@@ -3,6 +3,8 @@ const router = express.Router();
 const authenticateToken = require('../middleware/auth');
 const User = require('../models/User');
 const { sendPushNotification } = require('../utils/notificationService');
+const mongoose = require('mongoose');
+const Order = require('../models/Order');
 
 // Test endpoint to send a push notification
 router.post('/send-notification', authenticateToken, async (req, res) => {
@@ -156,6 +158,110 @@ router.post('/order-status-update', authenticateToken, async (req, res) => {
     res.status(500).json({
       success: false,
       message: 'Failed to send order status notification',
+      error: error.message
+    });
+  }
+});
+
+// Test endpoint to simulate an order notification that will open the modal
+router.post('/simulate-order-notification', authenticateToken, async (req, res) => {
+  try {
+    const { orderId } = req.body;
+    
+    if (!orderId) {
+      return res.status(400).json({
+        success: false,
+        message: 'Missing required field: orderId'
+      });
+    }
+    
+    // Get the current user's push token
+    const user = await User.findById(req.user.id);
+    if (!user || !user.pushToken) {
+      return res.status(400).json({
+        success: false,
+        message: 'User does not have a push token registered'
+      });
+    }
+    
+    // Check if the order exists and belongs to the user
+    const order = await Order.findOne({ orderId, userId: req.user.id });
+    if (!order) {
+      return res.status(404).json({
+        success: false,
+        message: 'Order not found or does not belong to this user'
+      });
+    }
+    
+    // Prepare notification data
+    const title = 'Order Update';
+    const body = `Your order #${orderId} status has been updated to ${order.status}.`;
+    
+    // Send the notification with special payload for modal display
+    const result = await sendPushNotification(
+      user.pushToken,
+      title,
+      body,
+      { 
+        type: 'orderUpdate',
+        orderId,
+        status: order.status,
+        showModal: true, // Special flag to directly show the modal
+        forceShow: true,  // Force notification to show 
+        immediate: true   // Show immediately
+      }
+    );
+    
+    if (result.error) {
+      return res.status(500).json({
+        success: false,
+        message: 'Failed to send notification',
+        error: result.error
+      });
+    }
+    
+    // Also add a receipt to the database
+    try {
+      const NotificationReceipt = mongoose.model('NotificationReceipt');
+      
+      const receipt = new NotificationReceipt({
+        orderId,
+        userId: req.user.id,
+        status: order.status,
+        previousStatus: order.status,
+        message: body,
+        timestamp: new Date(),
+        forceShow: true,
+        showModal: true // Add the showModal flag here too
+      });
+      
+      await receipt.save();
+    } catch (error) {
+      console.error('Error creating notification receipt:', error);
+      // Continue since the notification was sent
+    }
+    
+    // Also add the notification data to the response for debugging
+    res.json({
+      success: true,
+      message: 'Order notification sent successfully',
+      data: {
+        ...result,
+        notificationData: { 
+          type: 'orderUpdate',
+          orderId,
+          status: order.status,
+          showModal: true,
+          forceShow: true,
+          immediate: true
+        }
+      }
+    });
+  } catch (error) {
+    console.error('Error sending test order notification:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Failed to send test order notification',
       error: error.message
     });
   }
