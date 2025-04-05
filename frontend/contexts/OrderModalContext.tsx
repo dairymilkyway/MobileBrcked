@@ -3,8 +3,9 @@ import OrderDetailsModal from '@/components/OrderDetailsModal';
 import { useSelector } from 'react-redux';
 import { RootState } from '@/redux/store';
 import * as Notifications from 'expo-notifications';
-import { AppState, Platform } from 'react-native';
+import { AppState, Platform, BackHandler } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { useRouter } from 'expo-router';
 
 interface OrderModalContextType {
   showOrderModal: (orderId: string, preventNavigation?: boolean) => void;
@@ -34,9 +35,30 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   const [selectedOrderId, setSelectedOrderId] = useState<string | null>(null);
   const appState = useRef(AppState.currentState);
   const modalOpenedTimestamp = useRef<number | null>(null);
+  const router = useRouter();
   
   // Access the notifications from Redux to check for order updates
   const notifications = useSelector((state: RootState) => state.notifications.notifications);
+  
+  // Android back button handler - closes modal instead of navigating back
+  useEffect(() => {
+    if (Platform.OS === 'android') {
+      const backHandler = BackHandler.addEventListener('hardwareBackPress', () => {
+        if (modalVisible) {
+          console.log('Android: Back button pressed while modal visible, closing modal');
+          hideOrderModal();
+          return true; // Prevent default back action
+        }
+        // Let default back behavior happen
+        return false;
+      });
+      
+      return () => {
+        console.log('Android: Removing back button handler');
+        backHandler.remove();
+      };
+    }
+  }, [modalVisible]); // Re-attach listener when modalVisible changes
   
   // Check for pending order modals saved while app was in background
   useEffect(() => {
@@ -59,7 +81,7 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
             
             // Wait a second to make sure the app is fully initialized
             setTimeout(() => {
-              showOrderModal(mostRecentOrder.orderId);
+              showOrderModal(mostRecentOrder.orderId, true);
             }, 1000);
             
             // Remove all pending orders
@@ -102,12 +124,18 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         dataType: latestNotification.data?.type,
         orderId: latestNotification.data?.orderId,
         showModal: latestNotification.data?.showModal,
-        source: latestNotification.data?.source
+        source: latestNotification.data?.source,
+        clicked: latestNotification.data?.clicked
       });
       
-      // IMPORTANT: We no longer automatically open modals on new notifications
-      // This fixes the issue where modals would open on receipt of notifications
-      // Now, modals will only open when notifications are explicitly clicked
+      // Only open modal if notification was explicitly clicked (handled in NotificationBell)
+      if (latestNotification.data?.clicked && 
+          (latestNotification.data?.type === 'orderUpdate' || latestNotification.data?.type === 'orderPlaced') && 
+          latestNotification.data?.orderId) {
+        
+        const shouldPreventNavigation = Platform.OS === 'android' || latestNotification.data?.preventNavigation === true;
+        showOrderModal(latestNotification.data.orderId, shouldPreventNavigation);
+      }
     }
   }, [notifications]);
 
@@ -123,7 +151,7 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         // Only shown when user explicitly clicked the notification
         if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
           console.log('Found notification response with order ID:', data.orderId);
-          showOrderModal(data.orderId);
+          showOrderModal(data.orderId, Platform.OS === 'android');
         }
       }
     } catch (error) {
@@ -146,15 +174,10 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
         const shouldPreventNavigation = Platform.OS === 'android';
         
         // Use setTimeout to ensure the modal shows after any navigation attempts
-        if (shouldPreventNavigation) {
-          setTimeout(() => {
-            console.log('Android: Showing order modal with delay and navigation prevention');
-            showOrderModal(data.orderId, true); // Pass true to prevent navigation
-          }, 500);
-        } else {
-          // On iOS, we can show immediately without preventing navigation
-          showOrderModal(data.orderId, false);
-        }
+        setTimeout(() => {
+          console.log(`${Platform.OS}: Showing order modal with proper handling`);
+          showOrderModal(data.orderId, shouldPreventNavigation); 
+        }, Platform.OS === 'android' ? 500 : 300);
       }
     });
 
@@ -164,19 +187,22 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   }, []);
 
   const showOrderModal = (orderId: string, preventNavigation: boolean = false) => {
-    console.log('Opening order details modal for order ID:', orderId, 
+    console.log(`${Platform.OS}: Opening order details modal for order ID:`, orderId, 
       preventNavigation ? '(preventing navigation)' : '');
     
-    // If we need to prevent navigation (e.g., on Android), we'll handle it specifically
+    // For both Android and iOS, ensure consistent behavior
     if (preventNavigation && Platform.OS === 'android') {
-      // Need to use a delay to ensure modal appears over any navigation that might be happening
+      // For Android with navigation prevention:
+      // 1. Make sure we're on a stable screen first
+      // 2. Then show the modal with a slight delay
       setTimeout(() => {
         setSelectedOrderId(orderId);
         setModalVisible(true);
         modalOpenedTimestamp.current = Date.now();
       }, 300);
     } else {
-      // Normal flow for iOS or when not preventing navigation
+      // For iOS or when not preventing navigation:
+      // Show modal immediately
       setSelectedOrderId(orderId);
       setModalVisible(true);
       modalOpenedTimestamp.current = Date.now();

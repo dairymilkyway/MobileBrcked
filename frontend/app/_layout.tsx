@@ -70,23 +70,29 @@ function NotificationSetup() {
     // Check if this is an order notification
     // This is ONLY triggered when a notification is explicitly clicked by the user
     if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
+      console.log(`${Platform.OS}: Notification response for order:`, data.orderId);
+      
+      // Prepare notification data with platform-specific flags
+      const notificationData = {
+        ...data,
+        type: data.type || 'orderUpdate',
+        orderId: data.orderId,
+        showModal: true,       // This flag indicates the modal should be shown
+        clicked: true,         // Add explicit clicked flag
+        preventNavigation: Platform.OS === 'android', // Prevent navigation on Android
+        timestamp: Date.now()  // Add timestamp for uniqueness
+      };
+      
       // Add a notification to the Redux store, which will trigger the UI to show the order details modal
       dispatch(
         addNotification({
           title: response.notification.request.content.title || 'Order Update',
-          body: response.notification.request.content.body || 'Your order status has changed',
-          data: {
-            ...data,
-            // Ensure it has the expected format for our NotificationBell component
-            type: data.type || 'orderUpdate',
-            orderId: data.orderId,
-            showModal: true, // This flag indicates the modal should be shown
-            clicked: true // Add explicit clicked flag to indicate user interaction
-          }
+          body: response.notification.request.content.body || 'Your order has been updated',
+          data: notificationData
         })
       );
       
-      console.log('Notification clicked for order:', data.orderId);
+      console.log(`${Platform.OS}: Notification clicked for order:`, data.orderId);
     }
   };
 
@@ -526,7 +532,7 @@ export default function RootLayout() {
         
         // If app was opened from a notification, process it
         if (response) {
-          console.log('App opened from notification:', response.notification.request.content);
+          console.log(`${Platform.OS}: App opened from notification:`, response.notification.request.content);
           
           // Get the data from the notification
           const data = response.notification.request.content.data;
@@ -534,36 +540,39 @@ export default function RootLayout() {
           // If this is an order notification, add it to the store with the showModal flag
           // This is ONLY for notifications that were CLICKED to open the app
           if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
-            console.log('Initial notification has order ID:', data.orderId);
+            console.log(`${Platform.OS}: Initial notification has order ID:`, data.orderId);
             
-            // Android specific handling to prevent automatic navigation to index
+            // Platform specific handling
             const isAndroid = Platform.OS === 'android';
             
+            // Prepare notification data with platform-specific flags
+            const notificationData = {
+              ...data,
+              type: data.type || 'orderUpdate',
+              orderId: data.orderId,
+              showModal: true,       // This flag indicates the modal should be shown
+              clicked: true,         // Add explicit clicked flag 
+              preventNavigation: isAndroid, // Prevent navigation on Android
+              timestamp: Date.now()  // Add timestamp for uniqueness
+            };
+            
             // We need to delay this slightly to ensure the store is ready
+            // Use different delays based on platform
             setTimeout(() => {
               store.dispatch(
                 addNotification({
                   title: response.notification.request.content.title || 'Order Update',
-                  body: response.notification.request.content.body || 'Your order status has changed',
-                  data: {
-                    ...data,
-                    type: data.type || 'orderUpdate',
-                    orderId: data.orderId,
-                    showModal: true, // This flag indicates the notification was clicked
-                    clicked: true, // Add explicit clicked flag
-                    preventNavigation: isAndroid // Special flag for Android
-                  }
+                  body: response.notification.request.content.body || 'Your order has been updated',
+                  data: notificationData
                 })
               );
               
-              console.log(isAndroid ? 
-                'Android: Added order notification with preventNavigation flag' : 
-                'iOS: Added order notification');
-            }, isAndroid ? 800 : 1000); // Longer delay on Android
+              console.log(`${Platform.OS}: Added initial order notification with preventNavigation=${isAndroid}`);
+            }, isAndroid ? 1000 : 800); // Slightly longer delay on Android
           }
         }
       } catch (error) {
-        console.error('Error checking initial notification:', error);
+        console.error(`${Platform.OS}: Error checking initial notification:`, error);
       }
     };
     

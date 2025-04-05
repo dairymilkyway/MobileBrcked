@@ -76,45 +76,54 @@ export default function NotificationBell() {
 
   const handleNotificationPress = (id: string, data?: Record<string, any>) => {
     dispatch(markAsRead(id));
-    console.log('Notification pressed:', { id, data });
+    console.log(`${Platform.OS}: Notification pressed in NotificationBell:`, { id, data });
 
     // Check if this is an order notification
     if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
-      console.log('Order notification detected, orderId:', data.orderId);
-      // Close the notifications modal
+      console.log(`${Platform.OS}: Order notification detected, orderId:`, data.orderId);
+      
+      // First close the notifications modal
       setModalVisible(false);
       
-      // Mark this notification as clicked
+      // Mark this notification as clicked and add platform-specific flags
       data.clicked = true;
       
-      // For Android, add a special flag to prevent navigation
+      // Determine if we need to prevent navigation (always on Android)
       const shouldPreventNavigation = Platform.OS === 'android';
       if (shouldPreventNavigation) {
         data.preventNavigation = true;
       }
       
-      // Use the OrderModalContext to show the order details
-      showOrderModal(data.orderId, shouldPreventNavigation);
+      // Give the modal time to dismiss before showing order modal
+      setTimeout(() => {
+        // Use the OrderModalContext to show the order details
+        showOrderModal(data.orderId, shouldPreventNavigation);
+      }, 100);
+      
     } else if (data?.orderId) {
-      console.log('Generic order notification detected, orderId:', data.orderId);
-      // For backward compatibility with older notifications
+      console.log(`${Platform.OS}: Generic order notification detected, orderId:`, data.orderId);
+      
+      // Close the notifications modal first
       setModalVisible(false);
       
-      // For Android, add a special flag to prevent navigation
+      // Handle platform-specific behavior
       const shouldPreventNavigation = Platform.OS === 'android';
       
       // Mark this notification as clicked
       if (data) {
         data.clicked = true;
         
-        // For Android, add a special flag to prevent navigation
+        // Add prevention flag for Android
         if (shouldPreventNavigation) {
           data.preventNavigation = true;
         }
       }
       
-      // Use the OrderModalContext to show the order details
-      showOrderModal(data.orderId, shouldPreventNavigation);
+      // Give the modal time to dismiss before showing order modal
+      setTimeout(() => {
+        // Use the OrderModalContext to show the order details
+        showOrderModal(data.orderId, shouldPreventNavigation);
+      }, 100);
     }
   };
 
