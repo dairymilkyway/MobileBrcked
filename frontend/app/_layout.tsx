@@ -12,7 +12,7 @@ import { store } from '../redux/store';
 import { Alert, Platform } from 'react-native';
 import { registerForPushNotifications, registerTokenWithServer, setupNotificationListeners, registerBackgroundNotificationHandler } from '@/utils/notificationHelper';
 import * as Notifications from 'expo-notifications';
-import { addNotification } from '@/redux/slices/notificationSlice';
+import { addNotification, setNotifications, loadNotificationsFromStorage } from '@/redux/slices/notificationSlice';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import axios from 'axios';
 import { API_BASE_URL } from '@/env';
@@ -520,6 +520,36 @@ export default function RootLayout() {
       
       // Register background notification handler
       registerBackgroundNotificationHandler();
+      
+      // Load notifications for logged in user
+      const loadUserNotifications = async () => {
+        try {
+          const userToken = await AsyncStorage.getItem('userToken');
+          const userRole = await AsyncStorage.getItem('userRole');
+          
+          if (userToken && userRole === 'user') {
+            console.log('App startup: Loading stored notifications');
+            
+            // First try to load from storage
+            try {
+              const storedNotifications = await loadNotificationsFromStorage();
+              
+              if (storedNotifications && storedNotifications.length > 0) {
+                console.log(`App startup: Found ${storedNotifications.length} stored notifications`);
+                store.dispatch(setNotifications(storedNotifications));
+              } else {
+                console.log('App startup: No stored notifications found');
+              }
+            } catch (storageError) {
+              console.error('App startup: Error loading notifications from storage:', storageError);
+            }
+          }
+        } catch (error) {
+          console.error('App startup: Error checking user status for notifications:', error);
+        }
+      };
+      
+      loadUserNotifications();
     }
   }, [loaded]);
 

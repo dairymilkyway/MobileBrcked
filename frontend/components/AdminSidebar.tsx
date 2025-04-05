@@ -17,6 +17,9 @@ import { usePathname, useRouter, Href } from 'expo-router';
 import { useSafeAreaInsets } from 'react-native-safe-area-context';
 import { PanGestureHandler } from 'react-native-gesture-handler';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+import { logout } from '@/utils/api';
+import { useDispatch } from 'react-redux';
+import { clearNotifications } from '@/redux/slices/notificationSlice';
 
 const { width } = Dimensions.get('window');
 const DRAWER_WIDTH = width * 0.7;
@@ -75,6 +78,7 @@ const AdminSidebar = ({ children }: AdminSidebarProps) => {
   const insets = useSafeAreaInsets();
   const translateX = useRef(new Animated.Value(-DRAWER_WIDTH)).current;
   const overlayOpacity = useRef(new Animated.Value(0)).current;
+  const dispatch = useDispatch();
 
   const toggleDrawer = () => {
     const toValue = isOpen ? -DRAWER_WIDTH : 0;
@@ -168,16 +172,19 @@ const AdminSidebar = ({ children }: AdminSidebarProps) => {
   };
 
   const handleLogout = async () => {
+    setShowLogoutModal(false);
+    
     try {
-      // Clear the user token and role from AsyncStorage
-      await AsyncStorage.removeItem('userToken');
-      await AsyncStorage.removeItem('userRole');
+      // Call logout utility function
+      await logout();
+      
+      // Clear notifications from Redux store
+      dispatch(clearNotifications());
       
       // Navigate back to the login screen
       router.replace('/Login');
     } catch (error) {
       console.error('Error during logout:', error);
-      Alert.alert('Error', 'There was a problem logging out. Please try again.');
     }
   };
 

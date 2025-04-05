@@ -1,10 +1,13 @@
 import React, { useState } from 'react';
-import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, Modal, Animated, LayoutAnimation } from 'react-native';
+import { View, Text, StyleSheet, TouchableOpacity, SafeAreaView, Platform, Modal, Animated, LayoutAnimation, Dimensions } from 'react-native';
 import { useRouter } from 'expo-router';
 import { useColorScheme } from '@/hooks/useColorScheme';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import NotificationBell from './NotificationBell';
+import { logout } from '@/utils/api';
+import { useDispatch } from 'react-redux';
+import { clearNotifications } from '@/redux/slices/notificationSlice';
 
 export default function UserHeader({ section = 'Home', compact = false }) {
   const router = useRouter();
@@ -12,6 +15,7 @@ export default function UserHeader({ section = 'Home', compact = false }) {
   const [showLogoutModal, setShowLogoutModal] = useState(false);
   const [menuExpanded, setMenuExpanded] = useState(false);
   const [titleOpacity] = useState(new Animated.Value(1));
+  const dispatch = useDispatch();
 
   // Toggle menu function
   const toggleMenu = () => {
@@ -51,15 +55,18 @@ export default function UserHeader({ section = 'Home', compact = false }) {
   };
 
   const handleLogout = async () => {
+    setShowLogoutModal(false);
+    
     try {
-      // Clear the user token and role from AsyncStorage
-      await AsyncStorage.removeItem('userToken');
-      await AsyncStorage.removeItem('userRole');
-      
-      // Clear notification registration data
-      await AsyncStorage.removeItem('tokenLastRegistered');
-      // We'll keep the actual push token to avoid having to request permissions again
+      // Clear notification token registration timestamp
+      await AsyncStorage.removeItem('lastNotificationRegistration');
       // But clear the "last registered" timestamp so it will re-register on next login
+      
+      // Call logout utility function
+      await logout();
+      
+      // Clear notifications from Redux store
+      dispatch(clearNotifications());
       
       // Navigate back to the login screen
       router.replace('/Login');

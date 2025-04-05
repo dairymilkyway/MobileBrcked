@@ -18,6 +18,9 @@ import { useRouter, useFocusEffect } from 'expo-router';
 import AsyncStorage from '@react-native-async-storage/async-storage'; // ✅ Import AsyncStorage
 import { API_BASE_URL } from '@/env';
 import { registerPushTokenAfterLogin } from '@/utils/notificationHelper';
+import { store } from '@/redux/store';
+import { setNotifications } from '@/redux/slices/notificationSlice';
+import { fetchUserNotifications } from '@/utils/api';
 
 const { width } = Dimensions.get('window');
 
@@ -155,6 +158,21 @@ export default function LoginScreen() {
               const registered = await registerPushTokenAfterLogin();
               if (registered) {
                 console.log('Push notification token registered successfully after login');
+                
+                // Also fetch notifications for user after successful login
+                try {
+                  console.log('Fetching initial notifications for user');
+                  const notificationsResponse = await fetchUserNotifications();
+                  
+                  if (notificationsResponse.success && notificationsResponse.data) {
+                    console.log(`Loaded ${notificationsResponse.data.length} initial notifications`);
+                    store.dispatch(setNotifications(notificationsResponse.data));
+                  }
+                } catch (notificationFetchError) {
+                  console.error('Error fetching initial notifications:', notificationFetchError);
+                  // Continue with login flow even if notification fetch fails
+                }
+                
               } else {
                 console.warn('Failed to register push notification token after login');
               }

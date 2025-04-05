@@ -27,6 +27,8 @@ import {
   setPriceRange as setStorePriceRange,
   clearFilters as clearStoreFilters
 } from '@/redux/slices/productSlice';
+import { fetchUserNotifications } from '@/utils/api';
+import { setNotifications } from '@/redux/slices/notificationSlice';
 
 // LEGO brand colors
 const LEGO_COLORS = {
@@ -110,7 +112,32 @@ export default function Home() {
         }
       };
       
+      // Fetch user notifications when the home screen becomes active
+      const loadUserNotifications = async () => {
+        try {
+          // Check if user is logged in
+          const userToken = await AsyncStorage.getItem('userToken');
+          if (!userToken) {
+            console.log('Home screen: No user token, skipping notification fetch');
+            return;
+          }
+          
+          console.log('Home screen: Fetching user notifications');
+          const notificationsResponse = await fetchUserNotifications();
+          
+          if (notificationsResponse.success && notificationsResponse.data) {
+            console.log(`Home screen: Loaded ${notificationsResponse.data.length} notifications`);
+            dispatch(setNotifications(notificationsResponse.data));
+          } else {
+            console.log('Home screen: No notifications found or fetch failed');
+          }
+        } catch (error) {
+          console.error('Home screen: Error fetching notifications:', error);
+        }
+      };
+      
       registerPushToken();
+      loadUserNotifications();
       
       return () => {
         // Cleanup function if needed

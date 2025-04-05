@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { 
   View, 
   Text, 
@@ -7,15 +7,25 @@ import {
   Modal, 
   FlatList, 
   Pressable,
-  Platform
+  Platform,
+  ActivityIndicator
 } from 'react-native';
 import { Ionicons, MaterialCommunityIcons } from '@expo/vector-icons';
 import { useSelector, useDispatch } from 'react-redux';
 import { RootState } from '../redux/store';
-import { markAllAsRead, markAsRead, clearNotifications, addNotification } from '../redux/slices/notificationSlice';
+import { 
+  markAllAsRead, 
+  markAsRead, 
+  clearNotifications, 
+  addNotification, 
+  setNotifications, 
+  loadNotificationsFromStorage 
+} from '../redux/slices/notificationSlice';
 import { useRouter } from 'expo-router';
 import * as Notifications from 'expo-notifications';
 import { useOrderModal } from '@/contexts/OrderModalContext';
+import { fetchUserNotifications } from '@/utils/api';
+import AsyncStorage from '@react-native-async-storage/async-storage';
 
 // LEGO brand colors
 const LEGO_COLORS = {
@@ -40,10 +50,50 @@ const LEGO_SHADOW = {
 
 export default function NotificationBell() {
   const [modalVisible, setModalVisible] = useState(false);
-  const { notifications, unreadCount } = useSelector((state: RootState) => state.notifications);
+  const [isLoading, setIsLoading] = useState(false);
+  const { notifications, unreadCount, isLoaded } = useSelector((state: RootState) => state.notifications);
   const dispatch = useDispatch();
   const router = useRouter();
   const { showOrderModal } = useOrderModal();
+
+  // Initialize notifications from storage when component mounts
+  useEffect(() => {
+    const initializeNotifications = async () => {
+      // Check if we already have notifications loaded
+      if (isLoaded) {
+        return;
+      }
+      
+      // Check if user is logged in
+      const userToken = await AsyncStorage.getItem('userToken');
+      if (!userToken) {
+        console.log(`${Platform.OS}: No user token, skipping notification loading`);
+        return;
+      }
+      
+      setIsLoading(true);
+      try {
+        // Try to load from AsyncStorage first
+        const storedNotifications = await loadNotificationsFromStorage();
+        
+        if (storedNotifications && storedNotifications.length > 0) {
+          console.log(`${Platform.OS}: Loaded ${storedNotifications.length} notifications from storage`);
+          dispatch(setNotifications(storedNotifications));
+          
+          // We still fetch from API in background to ensure we have the latest
+          fetchNotifications(false);
+        } else {
+          // If nothing in storage, fetch from API
+          await fetchNotifications(true);
+        }
+      } catch (error) {
+        console.error(`${Platform.OS}: Error initializing notifications:`, error);
+        setIsLoading(false);
+      }
+    };
+    
+    initializeNotifications();
+  }, [dispatch, isLoaded]);
 
   // Helper function to render LEGO studs
   const renderStuds = (count: number) => {
@@ -58,8 +108,35 @@ export default function NotificationBell() {
     return studs;
   };
 
-  const handleOpenNotifications = () => {
+  const handleOpenNotifications = async () => {
     setModalVisible(true);
+    
+    // If notifications haven't been loaded yet, fetch them
+    const loggedIn = await AsyncStorage.getItem('userToken');
+    if (loggedIn && !isLoaded && !isLoading) {
+      await fetchNotifications(true);
+    }
+  };
+
+  const fetchNotifications = async (showLoading = true) => {
+    if (showLoading) {
+      setIsLoading(true);
+    }
+    
+    try {
+      const response = await fetchUserNotifications();
+      
+      if (response.success && response.data) {
+        console.log(`${Platform.OS}: Loaded ${response.data.length} notifications from API`);
+        dispatch(setNotifications(response.data));
+      }
+    } catch (error) {
+      console.error(`${Platform.OS}: Error loading notifications:`, error);
+    } finally {
+      if (showLoading) {
+        setIsLoading(false);
+      }
+    }
   };
 
   const handleCloseNotifications = () => {
@@ -213,7 +290,12 @@ export default function NotificationBell() {
               </TouchableOpacity>
             </View>
 
-            {notifications.length === 0 ? (
+            {isLoading ? (
+              <View style={styles.emptyContainer}>
+                <ActivityIndicator size="large" color={LEGO_COLORS.blue} />
+                <Text style={styles.emptySubText}>Loading notifications...</Text>
+              </View>
+            ) : notifications.length === 0 ? (
               <View style={styles.emptyContainer}>
                 <MaterialCommunityIcons name="toy-brick-outline" size={64} color={LEGO_COLORS.yellow} />
                 <Text style={styles.emptyText}>No notifications</Text>

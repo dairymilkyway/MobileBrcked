@@ -361,8 +361,8 @@ export const loginUser = async (email: string, password: string) => {
 // Logout user
 export const logout = async () => {
   try {
-    console.log('Logging out user');
-    const token = await getToken();
+    const token = await AsyncStorage.getItem('userToken');
+    const userId = await AsyncStorage.getItem('userId');
     
     if (token) {
       try {
@@ -371,8 +371,8 @@ export const logout = async () => {
           method: 'POST',
           headers: {
             'Authorization': `Bearer ${token}`,
-            'Content-Type': 'application/json',
-          },
+            'Content-Type': 'application/json'
+          }
         });
         
         console.log('Logout response status:', response.status);
@@ -382,17 +382,26 @@ export const logout = async () => {
       }
     }
     
-    // Clear local storage regardless of server response
-    await handleAuthError();
+    // Clear all user data from AsyncStorage
+    await AsyncStorage.removeItem('token');
+    await AsyncStorage.removeItem('userToken');
+    await AsyncStorage.removeItem('userRole');
+    await AsyncStorage.removeItem('userEmail');
+    await AsyncStorage.removeItem('userId');
+    await AsyncStorage.removeItem('userName');
+    
+    // Clear notifications for this user
+    if (userId) {
+      await AsyncStorage.removeItem(`notifications_${userId}`);
+    }
+    
+    // Clear any other user-specific data
+    await AsyncStorage.removeItem('lastNotificationRegistration');
+    await AsyncStorage.removeItem('pushToken');
+    
     return true;
   } catch (error) {
     console.error('Error during logout:', error);
-    // Make sure local storage is cleared even if there's an error
-    try {
-      await handleAuthError();
-    } catch (err) {
-      console.error('Failed to clear auth data during error handling:', err);
-    }
     return false;
   }
 };
@@ -443,5 +452,102 @@ export const updateUserProfile = async (userData: {
   } catch (error) {
     console.error('Error updating user profile:', error);
     throw error;
+  }
+};
+
+// Fetch user notifications
+export const fetchUserNotifications = async () => {
+  try {
+    const userToken = await AsyncStorage.getItem('userToken');
+    
+    if (!userToken) {
+      console.log('No token available to fetch notifications');
+      return { success: false, error: 'Not authenticated' };
+    }
+    
+    console.log('Fetching user notifications');
+    
+    // First try to get from notification receipts API
+    try {
+      const receiptsResponse = await fetch(`${API_BASE_URL}/notifications/receipts?markAsRead=false`, {
+        headers: {
+          'Authorization': `Bearer ${userToken}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (receiptsResponse.ok) {
+        const receiptsData = await receiptsResponse.json();
+        
+        if (receiptsData.success && receiptsData.data) {
+          console.log(`Fetched ${receiptsData.data.length} notification receipts`);
+          
+          // Transform the notification receipts into the format expected by Redux
+          const notifications = receiptsData.data.map((receipt: any) => ({
+            id: receipt._id || `receipt-${receipt.orderId}-${Date.now()}`,
+            title: 'Order Update',
+            body: receipt.message || `Your order #${receipt.orderId} status has been updated to: ${receipt.status}`,
+            read: receipt.isRead || false,
+            createdAt: new Date(receipt.timestamp).getTime(),
+            data: {
+              orderId: receipt.orderId,
+              status: receipt.status,
+              type: 'orderUpdate',
+              source: 'receipt',
+              receiptId: receipt._id
+            }
+          }));
+          
+          return { success: true, data: notifications };
+        }
+      }
+    } catch (error) {
+      console.log('Error fetching from receipts API, falling back to orders history');
+    }
+    
+    // If receipt API failed or returned no data, fall back to fetching from orders
+    const ordersResponse = await fetch(`${API_BASE_URL}/orders`, {
+      headers: {
+        'Authorization': `Bearer ${userToken}`,
+        'Content-Type': 'application/json'
+      }
+    });
+    
+    if (!ordersResponse.ok) {
+      console.error('Failed to fetch orders for notifications');
+      return { success: false, error: 'Failed to fetch orders' };
+    }
+    
+    const ordersData = await ordersResponse.json();
+    
+    if (ordersData.success && ordersData.data) {
+      console.log(`Fetched ${ordersData.data.length} orders to create notifications`);
+      
+      // Create notifications from orders - newest first
+      const orders = ordersData.data.sort((a: any, b: any) => 
+        new Date(b.updatedAt).getTime() - new Date(a.updatedAt).getTime()
+      );
+      
+      const notifications = orders.map((order: any) => ({
+        id: `order-${order.orderId}-${Date.now()}`,
+        title: 'Order Update',
+        body: `Your order #${order.orderId} status: ${order.status}`,
+        read: true, // Mark as read since these are just for history
+        createdAt: new Date(order.updatedAt).getTime(),
+        data: {
+          orderId: order.orderId,
+          status: order.status,
+          type: 'orderUpdate',
+          source: 'order-history'
+        }
+      }));
+      
+      return { success: true, data: notifications };
+    }
+    
+    return { success: false, error: 'No notifications found' };
+  } catch (error) {
+    console.error('Error fetching user notifications:', error);
+    return { success: false, error: 'Failed to fetch notifications' };
   }
 }; 
