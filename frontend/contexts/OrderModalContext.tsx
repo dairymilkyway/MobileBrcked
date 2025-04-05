@@ -7,7 +7,7 @@ import { AppState, Platform } from 'react-native';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 
 interface OrderModalContextType {
-  showOrderModal: (orderId: string) => void;
+  showOrderModal: (orderId: string, preventNavigation?: boolean) => void;
   hideOrderModal: () => void;
 }
 
@@ -141,7 +141,20 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
       // Only shown when user explicitly clicked the notification
       if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
         console.log('Notification response listener caught order ID:', data.orderId);
-        showOrderModal(data.orderId);
+        
+        // On Android, we need to prevent navigation
+        const shouldPreventNavigation = Platform.OS === 'android';
+        
+        // Use setTimeout to ensure the modal shows after any navigation attempts
+        if (shouldPreventNavigation) {
+          setTimeout(() => {
+            console.log('Android: Showing order modal with delay and navigation prevention');
+            showOrderModal(data.orderId, true); // Pass true to prevent navigation
+          }, 500);
+        } else {
+          // On iOS, we can show immediately without preventing navigation
+          showOrderModal(data.orderId, false);
+        }
       }
     });
 
@@ -150,11 +163,24 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
     };
   }, []);
 
-  const showOrderModal = (orderId: string) => {
-    console.log('Opening order details modal for order ID:', orderId);
-    setSelectedOrderId(orderId);
-    setModalVisible(true);
-    modalOpenedTimestamp.current = Date.now();
+  const showOrderModal = (orderId: string, preventNavigation: boolean = false) => {
+    console.log('Opening order details modal for order ID:', orderId, 
+      preventNavigation ? '(preventing navigation)' : '');
+    
+    // If we need to prevent navigation (e.g., on Android), we'll handle it specifically
+    if (preventNavigation && Platform.OS === 'android') {
+      // Need to use a delay to ensure modal appears over any navigation that might be happening
+      setTimeout(() => {
+        setSelectedOrderId(orderId);
+        setModalVisible(true);
+        modalOpenedTimestamp.current = Date.now();
+      }, 300);
+    } else {
+      // Normal flow for iOS or when not preventing navigation
+      setSelectedOrderId(orderId);
+      setModalVisible(true);
+      modalOpenedTimestamp.current = Date.now();
+    }
   };
 
   const hideOrderModal = () => {

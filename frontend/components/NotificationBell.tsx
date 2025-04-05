@@ -87,17 +87,34 @@ export default function NotificationBell() {
       // Mark this notification as clicked
       data.clicked = true;
       
+      // For Android, add a special flag to prevent navigation
+      const shouldPreventNavigation = Platform.OS === 'android';
+      if (shouldPreventNavigation) {
+        data.preventNavigation = true;
+      }
+      
       // Use the OrderModalContext to show the order details
-      showOrderModal(data.orderId);
+      showOrderModal(data.orderId, shouldPreventNavigation);
     } else if (data?.orderId) {
       console.log('Generic order notification detected, orderId:', data.orderId);
       // For backward compatibility with older notifications
       setModalVisible(false);
       
-      // Mark this notification as clicked
-      if (data) data.clicked = true;
+      // For Android, add a special flag to prevent navigation
+      const shouldPreventNavigation = Platform.OS === 'android';
       
-      showOrderModal(data.orderId);
+      // Mark this notification as clicked
+      if (data) {
+        data.clicked = true;
+        
+        // For Android, add a special flag to prevent navigation
+        if (shouldPreventNavigation) {
+          data.preventNavigation = true;
+        }
+      }
+      
+      // Use the OrderModalContext to show the order details
+      showOrderModal(data.orderId, shouldPreventNavigation);
     }
   };
 

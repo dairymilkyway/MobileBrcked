@@ -9,7 +9,7 @@ import { SafeAreaProvider } from 'react-native-safe-area-context';
 import { GestureHandlerRootView } from 'react-native-gesture-handler';
 import { Provider, useDispatch } from 'react-redux';
 import { store } from '../redux/store';
-import { Alert } from 'react-native';
+import { Alert, Platform } from 'react-native';
 import { registerForPushNotifications, registerTokenWithServer, setupNotificationListeners, registerBackgroundNotificationHandler } from '@/utils/notificationHelper';
 import * as Notifications from 'expo-notifications';
 import { addNotification } from '@/redux/slices/notificationSlice';
@@ -536,6 +536,9 @@ export default function RootLayout() {
           if ((data?.type === 'orderUpdate' || data?.type === 'orderPlaced') && data?.orderId) {
             console.log('Initial notification has order ID:', data.orderId);
             
+            // Android specific handling to prevent automatic navigation to index
+            const isAndroid = Platform.OS === 'android';
+            
             // We need to delay this slightly to ensure the store is ready
             setTimeout(() => {
               store.dispatch(
@@ -547,11 +550,16 @@ export default function RootLayout() {
                     type: data.type || 'orderUpdate',
                     orderId: data.orderId,
                     showModal: true, // This flag indicates the notification was clicked
-                    clicked: true // Add explicit clicked flag
+                    clicked: true, // Add explicit clicked flag
+                    preventNavigation: isAndroid // Special flag for Android
                   }
                 })
               );
-            }, 1000);
+              
+              console.log(isAndroid ? 
+                'Android: Added order notification with preventNavigation flag' : 
+                'iOS: Added order notification');
+            }, isAndroid ? 800 : 1000); // Longer delay on Android
           }
         }
       } catch (error) {
