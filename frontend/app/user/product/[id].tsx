@@ -22,10 +22,18 @@ import { AntDesign } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { fetchProductDetail, clearSelectedProduct } from '@/redux/slices/productSlice';
+import { checkReviewEligibility } from '@/utils/api';
 
 interface RatingData {
   averageRating: number;
   totalReviews: number;
+}
+
+interface ReviewEligibility {
+  canReview: boolean;
+  hasPurchased: boolean;
+  hasReviewed: boolean;
+  existingReviewId: string | null;
 }
 
 export default function ProductDetail() {
@@ -50,6 +58,15 @@ export default function ProductDetail() {
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const popupAnimation = useRef(new Animated.Value(0)).current;
   
+  // Add review eligibility state
+  const [reviewEligibility, setReviewEligibility] = useState<ReviewEligibility>({
+    canReview: false,
+    hasPurchased: false,
+    hasReviewed: false,
+    existingReviewId: null
+  });
+  const [loadingEligibility, setLoadingEligibility] = useState(false);
+  
   // Sample images for demonstration - in real implementation, these would come from the product data
   const [productImages, setProductImages] = useState<string[]>([]);
   
@@ -60,6 +77,7 @@ export default function ProductDetail() {
         // Fetch product details using Redux action
         dispatch(fetchProductDetail(id.toString()));
         fetchProductRatings();
+        checkCanReviewProduct(); // Check if user can review this product
       }
       
       // Clean up on screen blur or component unmount
@@ -323,6 +341,45 @@ export default function ProductDetail() {
     });
   };
 
+  // Check if the user can review this product
+  const checkCanReviewProduct = async () => {
+    try {
+      setLoadingEligibility(true);
+      const userId = await AsyncStorage.getItem('userId');
+      
+      if (!userId || !id) {
+        setLoadingEligibility(false);
+        return;
+      }
+
+      const result = await checkReviewEligibility(id.toString());
+      
+      if (result.success) {
+        setReviewEligibility({
+          canReview: result.canReview,
+          hasPurchased: result.hasPurchased,
+          hasReviewed: result.hasReviewed,
+          existingReviewId: result.existingReviewId
+        });
+      }
+    } catch (err) {
+      console.error('Error checking review eligibility:', err);
+    } finally {
+      setLoadingEligibility(false);
+    }
+  };
+  
+  // Get the appropriate review button text based on eligibility
+  const getReviewButtonText = () => {
+    if (!reviewEligibility.hasPurchased) {
+      return 'Purchase to review';
+    } else if (reviewEligibility.hasReviewed) {
+      return 'Edit your review';
+    } else {
+      return 'Write a review';
+    }
+  };
+
   return (
     <View style={styles.container}>
       {/* Make UserHeader more compact */}
@@ -413,14 +470,31 @@ export default function ProductDetail() {
             
             {/* Rating display */}
             <View style={styles.ratingContainer}>
-              <View style={styles.starContainer}>
+              <View style={styles.starsRow}>
                 {renderStars(ratings.averageRating)}
               </View>
-              <TouchableOpacity 
-                style={styles.reviewsButton}
-                onPress={() => router.push(`/user/product/reviews?id=${id}`)}
+              <TouchableOpacity
+                style={[
+                  styles.reviewsButton,
+                  !reviewEligibility.hasPurchased && styles.reviewsButtonDisabled
+                ]}
+                onPress={() => {
+                  if (reviewEligibility.hasReviewed) {
+                    // Navigate to reviews with focus on user's review
+                    router.push(`/user/product/reviews?id=${id}&edit=true`);
+                  } else if (reviewEligibility.hasPurchased) {
+                    // Navigate to reviews page where user can add a review
+                    router.push(`/user/product/reviews?id=${id}`);
+                  } else {
+                    // User hasn't purchased, show a message
+                    alert('You need to purchase this product before leaving a review.');
+                  }
+                }}
               >
                 <Text style={styles.reviewsButtonText}>
+                  {getReviewButtonText()}
+                </Text>
+                <Text style={styles.reviewsCount}>
                   {ratings.totalReviews > 0 ? `See all ${ratings.totalReviews} reviews` : 'No reviews yet'}
                 </Text>
                 <AntDesign name="right" size={16} color="#006DB7" />
@@ -920,7 +994,7 @@ const styles = StyleSheet.create({
     marginTop: 8,
     marginBottom: 12,
   },
-  starContainer: {
+  starsRow: {
     flexDirection: 'row',
     marginBottom: 4,
   },
@@ -928,11 +1002,20 @@ const styles = StyleSheet.create({
     flexDirection: 'row',
     alignItems: 'center',
   },
+  reviewsButtonDisabled: {
+    opacity: 0.6,
+  },
   reviewsButtonText: {
     color: '#006DB7',
     fontWeight: '500',
     marginRight: 4,
     fontFamily: Platform.OS === 'ios' ? 'Futura-Medium' : 'sans-serif-medium',
+  },
+  reviewsCount: {
+    color: '#666666',
+    fontSize: 12,
+    flex: 1,
+    fontFamily: Platform.OS === 'ios' ? 'Futura-Medium' : 'sans-serif',
   },
   errorMessageContainer: {
     backgroundColor: '#FFEBEE',

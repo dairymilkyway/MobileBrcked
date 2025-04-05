@@ -550,4 +550,137 @@ export const fetchUserNotifications = async () => {
     console.error('Error fetching user notifications:', error);
     return { success: false, error: 'Failed to fetch notifications' };
   }
+};
+
+// Check if a user is eligible to review a product (must have purchased it)
+export const checkReviewEligibility = async (productId: string) => {
+  try {
+    const token = await AsyncStorage.getItem('token');
+    
+    console.log('Token preview:', token ? `${token.substring(0, 10)}...` : 'None');
+    
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/reviews/can-review/${productId}`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Failed to check review eligibility' }));
+      throw new Error(errorData.message || `Error ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error('Error checking review eligibility:', error);
+    throw error;
+  }
+};
+
+// Submit a new product review
+export const submitProductReview = async (productId: string, rating: number, comment: string) => {
+  try {
+    const token = await AsyncStorage.getItem('token');
+    
+    console.log('Token preview:', token ? `${token.substring(0, 10)}...` : 'None');
+    
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/reviews/create`, {
+      method: 'POST',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        productId,
+        rating,
+        comment
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Failed to submit review' }));
+      throw new Error(errorData.message || `Error ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error('Error submitting review:', error);
+    throw error;
+  }
+};
+
+// Update an existing product review
+export const updateProductReview = async (reviewId: string, rating: number, comment: string) => {
+  try {
+    const token = await AsyncStorage.getItem('token');
+    
+    console.log('Token preview:', token ? `${token.substring(0, 10)}...` : 'None');
+    
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/reviews/update/${reviewId}`, {
+      method: 'PUT',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      },
+      body: JSON.stringify({
+        rating,
+        comment
+      })
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Failed to update review' }));
+      throw new Error(errorData.message || `Error ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error('Error updating review:', error);
+    throw error;
+  }
+};
+
+// Get user's reviews
+export const getUserReviews = async () => {
+  try {
+    const token = await AsyncStorage.getItem('token');
+    
+    console.log('Token preview:', token ? `${token.substring(0, 10)}...` : 'None');
+    
+    if (!token) {
+      throw new Error('Authentication required');
+    }
+
+    const response = await fetch(`${API_BASE_URL}/reviews/user`, {
+      method: 'GET',
+      headers: {
+        'Authorization': `Bearer ${token}`,
+        'Content-Type': 'application/json'
+      }
+    });
+
+    if (!response.ok) {
+      const errorData = await response.json().catch(() => ({ message: 'Failed to fetch user reviews' }));
+      throw new Error(errorData.message || `Error ${response.status}`);
+    }
+
+    return response.json();
+  } catch (error) {
+    console.error('Error fetching user reviews:', error);
+    throw error;
+  }
 }; 

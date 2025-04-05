@@ -13,7 +13,8 @@ import {
   TextInput,
   KeyboardAvoidingView,
   TouchableWithoutFeedback,
-  Keyboard
+  Keyboard,
+  Alert
 } from 'react-native';
 import { useLocalSearchParams, useRouter } from 'expo-router';
 import { useFocusEffect } from '@react-navigation/native';
@@ -21,6 +22,12 @@ import { AntDesign } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserHeader from '@/components/UserHeader';
 import { API_BASE_URL } from '@/env';
+import AsyncStorage from '@react-native-async-storage/async-storage';
+import { 
+  checkReviewEligibility, 
+  submitProductReview, 
+  updateProductReview 
+} from '@/utils/api';
 
 interface Review {
   _id: string;
@@ -31,6 +38,7 @@ interface Review {
   UserID: {
     username: string;
     email: string;
+    _id: string;
   };
 }
 
@@ -48,14 +56,24 @@ export default function ProductReviews() {
   const [error, setError] = useState<string | null>(null);
   const [refreshing, setRefreshing] = useState(false);
   
-  // Add new states for review modal
+  // User and review states
   const [modalVisible, setModalVisible] = useState(false);
   const [userRating, setUserRating] = useState(0);
   const [userComment, setUserComment] = useState('');
+  const [currentUserId, setCurrentUserId] = useState<string | null>(null);
+  
+  // Review eligibility states
+  const [canReview, setCanReview] = useState(false);
+  const [hasPurchased, setHasPurchased] = useState(false);
+  const [hasReviewed, setHasReviewed] = useState(false);
+  const [existingReviewId, setExistingReviewId] = useState<string | null>(null);
+  const [isEditMode, setIsEditMode] = useState(false);
+  const [loadingEligibility, setLoadingEligibility] = useState(false);
 
   useEffect(() => {
     fetchReviews();
     fetchProductInfo();
+    getCurrentUser();
   }, [id]);
   
   // Add useFocusEffect to refresh data when the screen comes into focus
@@ -63,11 +81,50 @@ export default function ProductReviews() {
     React.useCallback(() => {
       fetchReviews();
       fetchProductInfo();
+      checkCanReview();
       return () => {
         // Clean up if needed
       };
-    }, [id])
+    }, [id, currentUserId])
   );
+
+  const getCurrentUser = async () => {
+    try {
+      const userId = await AsyncStorage.getItem('userId');
+      setCurrentUserId(userId);
+    } catch (err) {
+      console.error('Error getting current user ID:', err);
+    }
+  };
+
+  const checkCanReview = async () => {
+    if (!id || !currentUserId) return;
+    
+    try {
+      setLoadingEligibility(true);
+      const result = await checkReviewEligibility(id.toString());
+      
+      if (result.success) {
+        setCanReview(result.canReview);
+        setHasPurchased(result.hasPurchased);
+        setHasReviewed(result.hasReviewed);
+        setExistingReviewId(result.existingReviewId);
+        
+        // If user has an existing review, pre-fill the form with its data
+        if (result.hasReviewed && result.existingReviewId) {
+          const existingReview = reviews.find(r => r._id === result.existingReviewId);
+          if (existingReview) {
+            setUserRating(existingReview.Rating);
+            setUserComment(existingReview.Comment);
+          }
+        }
+      }
+    } catch (err) {
+      console.error('Error checking review eligibility:', err);
+    } finally {
+      setLoadingEligibility(false);
+    }
+  };
 
   const fetchReviews = async () => {
     if (!id) return;
@@ -126,6 +183,7 @@ export default function ProductReviews() {
   const onRefresh = () => {
     setRefreshing(true);
     fetchReviews();
+    checkCanReview();
   };
 
   const renderStars = (rating: number) => {
@@ -171,31 +229,65 @@ export default function ProductReviews() {
     }).format(date);
   };
 
-  const renderReviewItem = ({ item }: { item: Review }) => (
-    <View style={styles.reviewCard}>
-      <View style={styles.reviewHeader}>
-        <View style={styles.reviewUser}>
-          <View style={styles.userIcon}>
-            <Text style={styles.userInitial}>{item.Name.charAt(0).toUpperCase()}</Text>
+  const renderReviewItem = ({ item }: { item: Review }) => {
+    const isCurrentUserReview = currentUserId && item.UserID && 
+      (item.UserID._id === currentUserId || 
+       (typeof item.UserID === 'string' && item.UserID === currentUserId));
+      
+    return (
+      <View style={styles.reviewCard}>
+        <View style={styles.reviewHeader}>
+          <View style={styles.reviewUser}>
+            <View style={styles.userIcon}>
+              <Text style={styles.userInitial}>{item.Name.charAt(0).toUpperCase()}</Text>
+            </View>
+            <View>
+              <Text style={styles.userName}>
+                {item.Name}
+                {isCurrentUserReview && ' (You)'}
+              </Text>
+              <Text style={styles.reviewDate}>{formatDate(item.Reviewdate)}</Text>
+            </View>
           </View>
-          <View>
-            <Text style={styles.userName}>{item.Name}</Text>
-            <Text style={styles.reviewDate}>{formatDate(item.Reviewdate)}</Text>
+          <View style={styles.ratingContainer}>
+            {renderStars(item.Rating)}
           </View>
         </View>
-        <View style={styles.ratingContainer}>
-          {renderStars(item.Rating)}
-        </View>
+        <Text style={styles.reviewComment}>{item.Comment}</Text>
+        
+        {isCurrentUserReview && (
+          <TouchableOpacity 
+            style={styles.editButton}
+            onPress={() => handleEditReview(item)}
+          >
+            <AntDesign name="edit" size={16} color="#0066CC" />
+            <Text style={styles.editButtonText}>Edit Review</Text>
+          </TouchableOpacity>
+        )}
       </View>
-      <Text style={styles.reviewComment}>{item.Comment}</Text>
-    </View>
-  );
+    );
+  };
+
+  const handleEditReview = (review: Review) => {
+    setUserRating(review.Rating);
+    setUserComment(review.Comment);
+    setExistingReviewId(review._id);
+    setIsEditMode(true);
+    setModalVisible(true);
+  };
 
   const renderEmptyComponent = () => (
     <View style={styles.emptyContainer}>
       <MaterialCommunityIcons name="comment-off-outline" size={64} color="#CCCCCC" />
       <Text style={styles.emptyText}>No reviews yet for this product</Text>
-      <Text style={styles.emptySubtext}>Be the first one to leave a review!</Text>
+      {hasPurchased && !hasReviewed && (
+        <TouchableOpacity 
+          style={styles.addReviewButton}
+          onPress={() => handleAddReview()}
+        >
+          <Text style={styles.addReviewButtonText}>Be the first to review!</Text>
+        </TouchableOpacity>
+      )}
     </View>
   );
 
@@ -206,17 +298,80 @@ export default function ProductReviews() {
     return sum / reviews.length;
   };
 
-  const handleSubmitReview = () => {
-    // This would connect to your backend in a real implementation
-    console.log('Submit review:', { productId: id, rating: userRating, comment: userComment });
+  const handleAddReview = () => {
+    if (!hasPurchased) {
+      Alert.alert(
+        "Cannot Review",
+        "You can only review products you have purchased.",
+        [{ text: "OK" }]
+      );
+      return;
+    }
     
-    // Reset form and close modal
+    if (hasReviewed) {
+      // Find the user's existing review
+      const existingReview = reviews.find(
+        r => r.UserID && (
+          (typeof r.UserID === 'object' && r.UserID._id === currentUserId) || 
+          (typeof r.UserID === 'string' && r.UserID === currentUserId)
+        )
+      );
+      
+      if (existingReview) {
+        handleEditReview(existingReview);
+      } else {
+        // If we know the user has reviewed but can't find the review, refresh the reviews
+        fetchReviews();
+        Alert.alert(
+          "Review Found",
+          "You have already reviewed this product. You can edit your review.",
+          [{ text: "OK" }]
+        );
+      }
+      return;
+    }
+    
+    // New review
     setUserRating(0);
     setUserComment('');
-    setModalVisible(false);
+    setIsEditMode(false);
+    setModalVisible(true);
+  };
+
+  const handleSubmitReview = async () => {
+    if (userRating === 0) {
+      Alert.alert("Error", "Please select a rating");
+      return;
+    }
     
-    // Show success message (in a real app, you might use a toast notification)
-    alert('Thank you for your review!');
+    if (!userComment.trim()) {
+      Alert.alert("Error", "Please enter a comment");
+      return;
+    }
+    
+    try {
+      if (isEditMode && existingReviewId) {
+        // Update existing review
+        await updateProductReview(existingReviewId, userRating, userComment);
+        Alert.alert("Success", "Your review has been updated!");
+      } else {
+        // Create new review
+        await submitProductReview(id as string, userRating, userComment);
+        Alert.alert("Success", "Thank you for your review!");
+        
+        // Update review status
+        setHasReviewed(true);
+        setCanReview(false);
+      }
+      
+      // Reset form and close modal
+      setModalVisible(false);
+      
+      // Refresh reviews
+      fetchReviews();
+    } catch (error: any) {
+      Alert.alert("Error", error.message || "Failed to submit review");
+    }
   };
 
   const renderStarSelector = () => {
@@ -252,8 +407,8 @@ export default function ProductReviews() {
               uri: product.imageURL && product.imageURL.length > 0 
                 ? product.imageURL[0] 
                 : 'https://via.placeholder.com/100' 
-            }}
-            style={styles.productImage}
+            }} 
+            style={styles.productImage} 
           />
           <View style={styles.productInfo}>
             <Text style={styles.productName}>{product.name}</Text>
@@ -275,8 +430,20 @@ export default function ProductReviews() {
       )}
       
       <View style={styles.divider} />
+
+      {!loading && !loadingEligibility && hasPurchased && (
+        <TouchableOpacity 
+          style={styles.writeReviewButton}
+          onPress={handleAddReview}
+        >
+          <AntDesign name="edit" size={20} color="#FFFFFF" />
+          <Text style={styles.writeReviewText}>
+            {hasReviewed ? 'Edit your review' : 'Write a Review'}
+          </Text>
+        </TouchableOpacity>
+      )}
       
-      {loading ? (
+      {(loading && !refreshing) ? (
         <View style={styles.loadingContainer}>
           <ActivityIndicator size="large" color="#E3000B" />
           <Text style={styles.loadingText}>Loading reviews...</Text>
@@ -298,18 +465,9 @@ export default function ProductReviews() {
           keyExtractor={(item) => item._id}
           contentContainerStyle={styles.listContainer}
           ListEmptyComponent={renderEmptyComponent}
-          ListHeaderComponent={
-            <TouchableOpacity 
-              style={styles.writeReviewButton}
-              onPress={() => setModalVisible(true)}
-            >
-              <AntDesign name="edit" size={20} color="#FFFFFF" />
-              <Text style={styles.writeReviewText}>Write a Review</Text>
-            </TouchableOpacity>
-          }
           refreshControl={
-            <RefreshControl 
-              refreshing={refreshing} 
+            <RefreshControl
+              refreshing={refreshing}
               onRefresh={onRefresh}
               colors={["#E3000B"]} // LEGO red
               tintColor="#E3000B"
@@ -317,7 +475,7 @@ export default function ProductReviews() {
           }
         />
       )}
-
+      
       <TouchableOpacity 
         style={styles.backToProductButton}
         onPress={() => router.back()}
@@ -333,13 +491,15 @@ export default function ProductReviews() {
         visible={modalVisible}
         onRequestClose={() => setModalVisible(false)}
       >
-        <KeyboardAvoidingView 
+        <KeyboardAvoidingView
           behavior={Platform.OS === "ios" ? "padding" : "height"}
           style={styles.modalContainer}
         >
           <TouchableWithoutFeedback onPress={Keyboard.dismiss}>
             <View style={styles.modalContent}>
-              <Text style={styles.modalTitle}>Write a Review</Text>
+              <Text style={styles.modalTitle}>
+                {isEditMode ? 'Edit Your Review' : 'Write a Review'}
+              </Text>
               
               {product && (
                 <View style={styles.modalProductInfo}>
@@ -368,7 +528,14 @@ export default function ProductReviews() {
                 placeholder="Share your thoughts about this product..."
                 value={userComment}
                 onChangeText={setUserComment}
+                maxLength={500}
               />
+              
+              <View style={styles.charCount}>
+                <Text style={styles.charCountText}>
+                  {userComment.length}/500 characters
+                </Text>
+              </View>
               
               <View style={styles.modalButtons}>
                 <TouchableOpacity 
@@ -378,16 +545,18 @@ export default function ProductReviews() {
                   <Text style={styles.cancelButtonText}>Cancel</Text>
                 </TouchableOpacity>
                 
-                <TouchableOpacity 
+                <TouchableOpacity
                   style={[
                     styles.modalButton, 
                     styles.submitButton,
-                    (!userRating || !userComment) ? styles.disabledButton : {}
+                    (!userRating || !userComment.trim()) ? styles.disabledButton : {}
                   ]}
                   onPress={handleSubmitReview}
-                  disabled={!userRating || !userComment}
+                  disabled={!userRating || !userComment.trim()}
                 >
-                  <Text style={styles.submitButtonText}>Submit Review</Text>
+                  <Text style={styles.submitButtonText}>
+                    {isEditMode ? 'Update Review' : 'Submit Review'}
+                  </Text>
                 </TouchableOpacity>
               </View>
             </View>
@@ -623,7 +792,8 @@ const styles = StyleSheet.create({
     paddingVertical: 12,
     paddingHorizontal: 20,
     borderRadius: 8,
-    marginBottom: 16,
+    marginHorizontal: 16,
+    marginVertical: 16,
     borderWidth: 2,
     borderColor: '#0C0A00',
   },
@@ -723,7 +893,15 @@ const styles = StyleSheet.create({
     backgroundColor: '#F9F9F9',
     textAlignVertical: 'top',
     fontFamily: Platform.OS === 'ios' ? 'Futura-Medium' : 'sans-serif',
-    marginBottom: 20,
+  },
+  charCount: {
+    alignItems: 'flex-end',
+    marginTop: 8,
+    marginBottom: 16,
+  },
+  charCountText: {
+    color: '#999',
+    fontSize: 12,
   },
   modalButtons: {
     flexDirection: 'row',
@@ -762,5 +940,32 @@ const styles = StyleSheet.create({
   disabledButton: {
     backgroundColor: '#CCCCCC',
     borderColor: '#AAAAAA',
+  },
+  editButton: {
+    flexDirection: 'row',
+    alignItems: 'center',
+    marginTop: 12,
+    alignSelf: 'flex-end',
+  },
+  editButtonText: {
+    color: '#006DB7',
+    marginLeft: 4,
+    fontWeight: '500',
+    fontFamily: Platform.OS === 'ios' ? 'Futura-Medium' : 'sans-serif',
+  },
+  addReviewButton: {
+    marginTop: 16,
+    backgroundColor: '#E3000B',
+    paddingHorizontal: 20,
+    paddingVertical: 10,
+    borderRadius: 8,
+    borderWidth: 2,
+    borderColor: '#0C0A00',
+  },
+  addReviewButtonText: {
+    color: '#FFFFFF',
+    fontSize: 16,
+    fontWeight: 'bold',
+    fontFamily: Platform.OS === 'ios' ? 'Futura-Bold' : 'sans-serif-condensed',
   },
 });
