@@ -86,9 +86,19 @@ const OrderDetailsModal: React.FC<OrderDetailsModalProps> = ({
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // Reset state function
+  const resetState = () => {
+    setOrder(null);
+    setLoading(false);
+    setError(null);
+  };
+
   useEffect(() => {
     if (visible && orderId) {
       fetchOrderDetails(orderId);
+    } else if (!visible) {
+      // Reset state when modal is closed
+      resetState();
     }
   }, [visible, orderId]);
 

@@ -21,6 +21,9 @@ import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { createOrder, resetOrderState } from '@/redux/slices/orderSlices';
 import { ShippingDetails, Order } from '@/redux/slices/orderSlices';
+import { addNotification } from '@/redux/slices/notificationSlice';
+import { store } from '@/redux/store';
+import * as Notifications from 'expo-notifications';
 
 type PaymentMethod = 'gcash' | 'cod' | 'credit_card';
 
@@ -46,6 +49,7 @@ export default function CheckoutScreen() {
   const navigation = useNavigation();
   const dispatch = useAppDispatch();
   const { loading, error, success, selectedOrder } = useAppSelector(state => state.orders);
+  const notifications = useAppSelector(state => state.notifications.notifications);
   
   const [formData, setFormData] = useState<ShippingDetails>({
     name: '',
@@ -296,6 +300,74 @@ export default function CheckoutScreen() {
       
       // Clear selected items from AsyncStorage
       await AsyncStorage.removeItem('selectedCartItems');
+      
+      console.log(`Order created successfully. Scheduling notification for order: ${orderId}`);
+      
+      // Add a 2-3 second delay before sending the notification to ensure consistency
+      setTimeout(async () => {
+        try {
+          console.log(`Preparing order placed notification for order: ${orderId}`);
+          
+          // Get a fresh snapshot of the notifications to ensure we have the latest state
+          const currentNotifications = store.getState().notifications.notifications;
+          
+          // Check if notification already exists in the store to avoid duplicates
+          const notificationExists = currentNotifications.some((notification: any) => 
+            notification.data?.type === 'orderPlaced' && 
+            notification.data?.orderId === orderId
+          );
+          
+          console.log(`Notification check - exists in Redux store: ${notificationExists}`);
+
+          // First approach: Add to Redux store if not exists
+          if (!notificationExists) {
+            console.log(`Adding order placed notification to Redux for order: ${orderId}`);
+            
+            // Send order placed notification with consistent timing
+            dispatch(addNotification({
+              title: 'Order Placed Successfully',
+              body: `Your order #${orderId} has been placed successfully!`,
+              data: {
+                type: 'orderPlaced',
+                orderId: orderId,
+                showModal: true,
+                clicked: false  // Will be set to true when user taps notification
+              }
+            }));
+          }
+          
+          // Second approach: ALSO use the direct Expo Notifications API to ensure it always shows
+          // This is the most reliable way to ensure the notification appears
+          try {
+            console.log(`Scheduling direct push notification for order: ${orderId}`);
+            
+            // Use the Expo Notifications API directly
+            await Notifications.scheduleNotificationAsync({
+              content: {
+                title: 'Order Placed Successfully',
+                body: `Your order #${orderId} has been placed successfully!`,
+                data: {
+                  type: 'orderPlaced',
+                  orderId: orderId,
+                  showModal: true,
+                  forceShow: true,
+                  immediate: true,
+                  source: 'direct',
+                  timestamp: Date.now()
+                },
+                sound: true, // Ensure sound plays
+              },
+              trigger: null, // Send immediately
+            });
+            
+            console.log(`Direct push notification scheduled successfully for order: ${orderId}`);
+          } catch (notificationError) {
+            console.error(`Error scheduling direct push notification:`, notificationError);
+          }
+        } catch (error) {
+          console.error('Error in notification timeout handler:', error);
+        }
+      }, 2500); // 2.5 seconds delay
       
     } catch (error) {
       console.error('Error preparing order:', error);

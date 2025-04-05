@@ -342,8 +342,17 @@ export const OrderModalProvider: React.FC<{ children: React.ReactNode }> = ({ ch
   };
 
   const hideOrderModal = () => {
+    console.log(`${Platform.OS}: Destroying order modal state completely`);
+    
+    // Clear modal visibility
     setModalVisible(false);
-    setSelectedOrderId(null);
+    
+    // Clear order id with a small delay to ensure animations complete
+    setTimeout(() => {
+      setSelectedOrderId(null);
+      // Reset the modal opened timestamp
+      modalOpenedTimestamp.current = null;
+    }, 300);
   };
 
   return (
