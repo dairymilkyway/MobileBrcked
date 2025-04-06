@@ -21,71 +21,88 @@ import { useFocusEffect } from '@react-navigation/native';
 import { AntDesign } from '@expo/vector-icons';
 import { MaterialCommunityIcons } from '@expo/vector-icons';
 import UserHeader from '@/components/UserHeader';
-import { API_BASE_URL } from '@/env';
 import AsyncStorage from '@react-native-async-storage/async-storage';
+// Import Redux hooks and actions
+import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { 
-  checkReviewEligibility, 
-  submitProductReview, 
-  updateProductReview 
-} from '@/utils/api';
-
-interface Review {
-  _id: string;
-  Name: string;
-  Rating: number;
-  Comment: string;
-  Reviewdate: string;
-  UserID: {
-    username: string;
-    email: string;
-    _id: string;
-  };
-}
-
-interface ProductInfo {
-  name: string;
-  imageURL: string[];
-}
+  fetchProductReviews, 
+  fetchProductInfo,
+  checkReviewEligibilityThunk,
+  submitReview,
+  clearReviewState
+} from '@/redux/slices/reviewSlice';
 
 export default function ProductReviews() {
-  const { id } = useLocalSearchParams();
+  const { id, edit } = useLocalSearchParams();
   const router = useRouter();
-  const [reviews, setReviews] = useState<Review[]>([]);
-  const [product, setProduct] = useState<ProductInfo | null>(null);
-  const [loading, setLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
-  const [refreshing, setRefreshing] = useState(false);
+  const dispatch = useAppDispatch();
   
-  // User and review states
+  // Get review state from Redux
+  const {
+    reviews,
+    product,
+    reviewEligibility,
+    loading,
+    error,
+    submitting
+  } = useAppSelector((state) => state.reviews);
+  
+  // Local UI state
+  const [refreshing, setRefreshing] = useState(false);
   const [modalVisible, setModalVisible] = useState(false);
   const [userRating, setUserRating] = useState(0);
   const [userComment, setUserComment] = useState('');
   const [currentUserId, setCurrentUserId] = useState<string | null>(null);
-  
-  // Review eligibility states
-  const [canReview, setCanReview] = useState(false);
-  const [hasPurchased, setHasPurchased] = useState(false);
-  const [hasReviewed, setHasReviewed] = useState(false);
-  const [existingReviewId, setExistingReviewId] = useState<string | null>(null);
   const [isEditMode, setIsEditMode] = useState(false);
-  const [loadingEligibility, setLoadingEligibility] = useState(false);
+  
+  // Initialize with data from Redux state
+  const { 
+    hasPurchased, 
+    hasReviewed, 
+    existingReviewId 
+  } = reviewEligibility;
 
   useEffect(() => {
-    fetchReviews();
-    fetchProductInfo();
+    // Initialize edit mode from URL param
+    if (edit === 'true') {
+      setIsEditMode(true);
+      // If the edit param is true and there's an existing review, just prepare the form data
+      // but don't automatically show the modal
+      if (hasReviewed && existingReviewId) {
+        // Find the existing review to pre-populate the form
+        const existingReview = reviews.find(r => r._id === existingReviewId);
+        if (existingReview) {
+          setUserRating(existingReview.Rating);
+          setUserComment(existingReview.Comment);
+          // Remove this line to prevent auto-showing modal: setModalVisible(true);
+        }
+      }
+    }
+  }, [edit, hasReviewed, existingReviewId, reviews]);
+
+  useEffect(() => {
     getCurrentUser();
-  }, [id]);
+    
+    // Cleanup on unmount
+    return () => {
+      dispatch(clearReviewState());
+    };
+  }, []);
   
   // Add useFocusEffect to refresh data when the screen comes into focus
   useFocusEffect(
     React.useCallback(() => {
-      fetchReviews();
-      fetchProductInfo();
-      checkCanReview();
+      if (id) {
+        // Dispatch Redux actions to fetch data
+        dispatch(fetchProductReviews(id.toString()));
+        dispatch(fetchProductInfo(id.toString()));
+        dispatch(checkReviewEligibilityThunk(id.toString()));
+      }
+      
       return () => {
         // Clean up if needed
       };
-    }, [id, currentUserId])
+    }, [id, dispatch, currentUserId])
   );
 
   const getCurrentUser = async () => {
@@ -97,93 +114,16 @@ export default function ProductReviews() {
     }
   };
 
-  const checkCanReview = async () => {
-    if (!id || !currentUserId) return;
-    
-    try {
-      setLoadingEligibility(true);
-      const result = await checkReviewEligibility(id.toString());
-      
-      if (result.success) {
-        setCanReview(result.canReview);
-        setHasPurchased(result.hasPurchased);
-        setHasReviewed(result.hasReviewed);
-        setExistingReviewId(result.existingReviewId);
-        
-        // If user has an existing review, pre-fill the form with its data
-        if (result.hasReviewed && result.existingReviewId) {
-          const existingReview = reviews.find(r => r._id === result.existingReviewId);
-          if (existingReview) {
-            setUserRating(existingReview.Rating);
-            setUserComment(existingReview.Comment);
-          }
-        }
-      }
-    } catch (err) {
-      console.error('Error checking review eligibility:', err);
-    } finally {
-      setLoadingEligibility(false);
-    }
-  };
-
-  const fetchReviews = async () => {
-    if (!id) return;
-    
-    try {
-      setLoading(true);
-      console.log(`Fetching reviews from: ${API_BASE_URL}/reviews/product/${id}`);
-      
-      const response = await fetch(`${API_BASE_URL}/reviews/product/${id}`);
-      
-      if (!response.ok) {
-        const errorText = await response.text().catch(() => 'Unknown error');
-        console.error('Error response:', errorText);
-        throw new Error(`Error ${response.status}: Failed to fetch reviews`);
-      }
-      
-      const data = await response.json();
-      
-      if (data.success) {
-        setReviews(data.reviews || []);
-        setError(null);
-      } else {
-        throw new Error(data.message || 'Failed to load reviews');
-      }
-    } catch (err: any) {
-      console.error('Error fetching reviews:', err);
-      setError(err.message || 'Failed to load reviews');
-    } finally {
-      setLoading(false);
-      setRefreshing(false);
-    }
-  };
-
-  const fetchProductInfo = async () => {
-    if (!id) return;
-    
-    try {
-      const response = await fetch(`${API_BASE_URL}/products/${id}`);
-      
-      if (!response.ok) {
-        throw new Error(`Error ${response.status}: Failed to fetch product info`);
-      }
-      
-      const data = await response.json();
-      if (data.success && data.data) {
-        setProduct({
-          name: data.data.name,
-          imageURL: data.data.imageURL || []
-        });
-      }
-    } catch (err) {
-      console.error('Error fetching product info:', err);
-    }
-  };
-
   const onRefresh = () => {
     setRefreshing(true);
-    fetchReviews();
-    checkCanReview();
+    
+    // Dispatch Redux actions
+    if (id) {
+      dispatch(fetchProductReviews(id.toString()));
+      dispatch(checkReviewEligibilityThunk(id.toString()));
+    }
+    
+    setRefreshing(false);
   };
 
   const renderStars = (rating: number) => {
@@ -229,7 +169,7 @@ export default function ProductReviews() {
     }).format(date);
   };
 
-  const renderReviewItem = ({ item }: { item: Review }) => {
+  const renderReviewItem = ({ item }) => {
     const isCurrentUserReview = currentUserId && item.UserID && 
       (item.UserID._id === currentUserId || 
        (typeof item.UserID === 'string' && item.UserID === currentUserId));
@@ -268,10 +208,9 @@ export default function ProductReviews() {
     );
   };
 
-  const handleEditReview = (review: Review) => {
+  const handleEditReview = (review) => {
     setUserRating(review.Rating);
     setUserComment(review.Comment);
-    setExistingReviewId(review._id);
     setIsEditMode(true);
     setModalVisible(true);
   };
@@ -288,6 +227,13 @@ export default function ProductReviews() {
           <Text style={styles.addReviewButtonText}>Be the first to review!</Text>
         </TouchableOpacity>
       )}
+      {edit === 'true' && hasReviewed && (
+        <View style={styles.editPromptContainer}>
+          <Text style={styles.editPromptText}>
+            You can edit your review by clicking the "Edit your review" button above
+          </Text>
+        </View>
+      )}
     </View>
   );
 
@@ -299,7 +245,7 @@ export default function ProductReviews() {
   };
 
   const handleAddReview = () => {
-    if (!hasPurchased) {
+    if (!reviewEligibility.hasPurchased) {
       Alert.alert(
         "Cannot Review",
         "You can only review products you have purchased.",
@@ -308,7 +254,7 @@ export default function ProductReviews() {
       return;
     }
     
-    if (hasReviewed) {
+    if (reviewEligibility.hasReviewed) {
       // Find the user's existing review
       const existingReview = reviews.find(
         r => r.UserID && (
@@ -320,8 +266,8 @@ export default function ProductReviews() {
       if (existingReview) {
         handleEditReview(existingReview);
       } else {
-        // If we know the user has reviewed but can't find the review, refresh the reviews
-        fetchReviews();
+        // If we know the user has reviewed but can't find the review, refresh
+        onRefresh();
         Alert.alert(
           "Review Found",
           "You have already reviewed this product. You can edit your review.",
@@ -350,25 +296,23 @@ export default function ProductReviews() {
     }
     
     try {
-      if (isEditMode && existingReviewId) {
-        // Update existing review
-        await updateProductReview(existingReviewId, userRating, userComment);
-        Alert.alert("Success", "Your review has been updated!");
-      } else {
-        // Create new review
-        await submitProductReview(id as string, userRating, userComment);
-        Alert.alert("Success", "Thank you for your review!");
-        
-        // Update review status
-        setHasReviewed(true);
-        setCanReview(false);
-      }
+      // Use Redux action to submit review
+      await dispatch(submitReview({
+        productId: id as string,
+        rating: userRating,
+        comment: userComment,
+        isEdit: isEditMode,
+        reviewId: reviewEligibility.existingReviewId
+      })).unwrap();
+      
+      // Show success message
+      Alert.alert(
+        "Success", 
+        isEditMode ? "Your review has been updated!" : "Thank you for your review!"
+      );
       
       // Reset form and close modal
       setModalVisible(false);
-      
-      // Refresh reviews
-      fetchReviews();
     } catch (error: any) {
       Alert.alert("Error", error.message || "Failed to submit review");
     }
@@ -431,14 +375,14 @@ export default function ProductReviews() {
       
       <View style={styles.divider} />
 
-      {!loading && !loadingEligibility && hasPurchased && (
+      {!loading && reviewEligibility.hasPurchased && (
         <TouchableOpacity 
           style={styles.writeReviewButton}
           onPress={handleAddReview}
         >
           <AntDesign name="edit" size={20} color="#FFFFFF" />
           <Text style={styles.writeReviewText}>
-            {hasReviewed ? 'Edit your review' : 'Write a Review'}
+            {reviewEligibility.hasReviewed ? 'Edit your review' : 'Write a Review'}
           </Text>
         </TouchableOpacity>
       )}
@@ -453,7 +397,7 @@ export default function ProductReviews() {
           <Text style={styles.errorText}>{error}</Text>
           <TouchableOpacity 
             style={styles.retryButton}
-            onPress={fetchReviews}
+            onPress={onRefresh}
           >
             <Text style={styles.retryButtonText}>Try Again</Text>
           </TouchableOpacity>
@@ -552,11 +496,15 @@ export default function ProductReviews() {
                     (!userRating || !userComment.trim()) ? styles.disabledButton : {}
                   ]}
                   onPress={handleSubmitReview}
-                  disabled={!userRating || !userComment.trim()}
+                  disabled={!userRating || !userComment.trim() || submitting}
                 >
-                  <Text style={styles.submitButtonText}>
-                    {isEditMode ? 'Update Review' : 'Submit Review'}
-                  </Text>
+                  {submitting ? (
+                    <ActivityIndicator size="small" color="#FFFFFF" />
+                  ) : (
+                    <Text style={styles.submitButtonText}>
+                      {isEditMode ? 'Update Review' : 'Submit Review'}
+                    </Text>
+                  )}
                 </TouchableOpacity>
               </View>
             </View>
@@ -967,5 +915,20 @@ const styles = StyleSheet.create({
     fontSize: 16,
     fontWeight: 'bold',
     fontFamily: Platform.OS === 'ios' ? 'Futura-Bold' : 'sans-serif-condensed',
+  },
+  editPromptContainer: {
+    marginTop: 24,
+    padding: 16,
+    backgroundColor: 'rgba(0, 109, 183, 0.1)', // Light blue
+    borderRadius: 8,
+    borderWidth: 1,
+    borderColor: '#006DB7',
+    alignItems: 'center',
+  },
+  editPromptText: {
+    color: '#006DB7',
+    textAlign: 'center',
+    fontSize: 14,
+    fontFamily: Platform.OS === 'ios' ? 'Futura-Medium' : 'sans-serif',
   },
 });

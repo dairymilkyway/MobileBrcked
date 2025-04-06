@@ -22,19 +22,10 @@ import { AntDesign } from '@expo/vector-icons';
 import AsyncStorage from '@react-native-async-storage/async-storage';
 import { useAppDispatch, useAppSelector } from '@/redux/hooks';
 import { fetchProductDetail, clearSelectedProduct } from '@/redux/slices/productSlice';
-import { checkReviewEligibility } from '@/utils/api';
-
-interface RatingData {
-  averageRating: number;
-  totalReviews: number;
-}
-
-interface ReviewEligibility {
-  canReview: boolean;
-  hasPurchased: boolean;
-  hasReviewed: boolean;
-  existingReviewId: string | null;
-}
+import { 
+  fetchProductRatings, 
+  checkReviewEligibilityThunk 
+} from '@/redux/slices/reviewSlice';
 
 export default function ProductDetail() {
   const { id } = useLocalSearchParams();
@@ -48,24 +39,22 @@ export default function ProductDetail() {
     productDetailError: error 
   } = useAppSelector(state => state.products);
   
+  // Get reviews data from Redux store
+  const {
+    ratings,
+    reviewEligibility,
+    ratingLoading,
+    eligibilityLoading
+  } = useAppSelector(state => state.reviews);
+
   // Local UI state
   const [quantity, setQuantity] = useState(1);
   const [currentImageIndex, setCurrentImageIndex] = useState(0);
   const carouselRef = useRef<FlatList>(null);
-  const [ratings, setRatings] = useState<RatingData>({ averageRating: 0, totalReviews: 0 });
   const [stockError, setStockError] = useState<string | null>(null);
   const [isAddingToCart, setIsAddingToCart] = useState(false);
   const [showSuccessPopup, setShowSuccessPopup] = useState(false);
   const popupAnimation = useRef(new Animated.Value(0)).current;
-  
-  // Add review eligibility state
-  const [reviewEligibility, setReviewEligibility] = useState<ReviewEligibility>({
-    canReview: false,
-    hasPurchased: false,
-    hasReviewed: false,
-    existingReviewId: null
-  });
-  const [loadingEligibility, setLoadingEligibility] = useState(false);
   
   // Sample images for demonstration - in real implementation, these would come from the product data
   const [productImages, setProductImages] = useState<string[]>([]);
@@ -76,8 +65,9 @@ export default function ProductDetail() {
       if (id) {
         // Fetch product details using Redux action
         dispatch(fetchProductDetail(id.toString()));
-        fetchProductRatings();
-        checkCanReviewProduct(); // Check if user can review this product
+        // Fetch ratings and eligibility using Redux actions
+        dispatch(fetchProductRatings(id.toString()));
+        dispatch(checkReviewEligibilityThunk(id.toString()));
       }
       
       // Clean up on screen blur or component unmount
@@ -125,36 +115,6 @@ export default function ProductDetail() {
     } catch (error) {
       clearTimeout(timeout);
       throw error;
-    }
-  };
-
-  const fetchProductRatings = async () => {
-    if (!id) return;
-    
-    try {
-      const apiUrl = `${API_BASE_URL}/reviews/product/${id}/rating`;
-      console.log(`Fetching product ratings from: ${apiUrl}`);
-      
-      const response = await fetchWithTimeout(apiUrl);
-      
-      if (!response.ok) {
-        console.error(`Failed to fetch ratings: ${response.status}`);
-        // Don't throw an error, just return with default values
-        return;
-      }
-      
-      const ratingData = await response.json();
-      if (ratingData.success) {
-        setRatings({
-          averageRating: ratingData.averageRating || 0,
-          totalReviews: ratingData.totalReviews || 0
-        });
-      } else {
-        console.error('API returned failure for ratings:', ratingData.message);
-      }
-    } catch (err) {
-      console.error('Error fetching product ratings:', err);
-      // Don't update state on error to keep default values
     }
   };
 
@@ -341,34 +301,6 @@ export default function ProductDetail() {
     });
   };
 
-  // Check if the user can review this product
-  const checkCanReviewProduct = async () => {
-    try {
-      setLoadingEligibility(true);
-      const userId = await AsyncStorage.getItem('userId');
-      
-      if (!userId || !id) {
-        setLoadingEligibility(false);
-        return;
-      }
-
-      const result = await checkReviewEligibility(id.toString());
-      
-      if (result.success) {
-        setReviewEligibility({
-          canReview: result.canReview,
-          hasPurchased: result.hasPurchased,
-          hasReviewed: result.hasReviewed,
-          existingReviewId: result.existingReviewId
-        });
-      }
-    } catch (err) {
-      console.error('Error checking review eligibility:', err);
-    } finally {
-      setLoadingEligibility(false);
-    }
-  };
-  
   // Get the appropriate review button text based on eligibility
   const getReviewButtonText = () => {
     if (!reviewEligibility.hasPurchased) {
