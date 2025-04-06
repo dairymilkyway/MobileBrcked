@@ -6,6 +6,7 @@ const Product = require('../models/Product');
 const User = require('../models/User');
 const authenticateToken = require('../middleware/auth');
 const { sendOrderStatusNotification, sendOrderPlacedNotification } = require('../utils/notificationService');
+const NotificationReceipt = require('../models/NotificationReceipt');
 
 // Helper function to get order status message
 const getStatusMessage = (orderId, status) => {
@@ -168,9 +169,6 @@ router.post('/create', authenticateToken, async (req, res) => {
         
         // Create a notification receipt
         try {
-          // Get notification receipt model
-          const NotificationReceipt = require('mongoose').model('NotificationReceipt');
-          
           // Create receipt with unique ID
           const timestamp = uniqueTimestamp; // Use the same unique timestamp
           const message = `Your Order Placed Successfully!`;
@@ -366,9 +364,6 @@ router.patch('/admin/status/:orderId', authenticateToken, async (req, res) => {
     // Create a notification receipt for the user (new feature)
     let notificationReceiptCreated = false;
     try {
-      // Get notification receipt model
-      const NotificationReceipt = require('mongoose').model('NotificationReceipt');
-      
       // Create receipt
       const message = getStatusMessage(orderId, status);
       const receipt = new NotificationReceipt({
@@ -609,9 +604,6 @@ router.post('/test-notification/:orderId', authenticateToken, async (req, res) =
       
       // Also create a notification receipt for direct client access
       try {
-        // Get notification receipt model
-        const NotificationReceipt = require('mongoose').model('NotificationReceipt');
-        
         // Create receipt
         const message = getStatusMessage(orderId, status);
         const receipt = new NotificationReceipt({

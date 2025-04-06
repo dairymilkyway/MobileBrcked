@@ -2,22 +2,7 @@ const express = require('express');
 const router = express.Router();
 const mongoose = require('mongoose');
 const authenticateToken = require('../middleware/auth');
-
-// Create a simple notification receipt schema
-const notificationReceiptSchema = new mongoose.Schema({
-  orderId: { type: String, required: true },
-  userId: { type: String, required: true },
-  status: { type: String, required: true },
-  previousStatus: { type: String },
-  message: { type: String, required: true },
-  isRead: { type: Boolean, default: false },
-  timestamp: { type: Date, default: Date.now },
-  forceShow: { type: Boolean, default: true }
-});
-
-// Create the model if it doesn't exist
-const NotificationReceipt = mongoose.models.NotificationReceipt || 
-  mongoose.model('NotificationReceipt', notificationReceiptSchema);
+const NotificationReceipt = require('../models/NotificationReceipt');
 
 // Create a new notification receipt
 router.post('/receipt', authenticateToken, async (req, res) => {

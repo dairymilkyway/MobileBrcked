@@ -5,6 +5,7 @@ const User = require('../models/User');
 const { sendPushNotification } = require('../utils/notificationService');
 const mongoose = require('mongoose');
 const Order = require('../models/Order');
+const NotificationReceipt = require('../models/NotificationReceipt');
 
 // Test endpoint to send a push notification
 router.post('/send-notification', authenticateToken, async (req, res) => {
@@ -323,8 +324,6 @@ router.post('/simulate-order-placed', authenticateToken, async (req, res) => {
     
     // Also add a receipt to the database
     try {
-      const NotificationReceipt = mongoose.model('NotificationReceipt');
-      
       const receipt = new NotificationReceipt({
         orderId,
         userId: req.user.id,
