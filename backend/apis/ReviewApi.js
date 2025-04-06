@@ -319,4 +319,69 @@ router.get('/can-review/:productId', authenticateToken, async (req, res) => {
   }
 });
 
+// Get all reviews (sorted from newest to oldest)
+router.get('/all', async (req, res) => {
+  try {
+    const reviews = await Review.find({})
+      .sort({ Reviewdate: -1 }) // Sort by newest first
+      .populate('UserID', 'username email')
+      .populate('ProductID', 'name imageURL');
+    
+    return res.status(200).json({
+      success: true,
+      count: reviews.length,
+      reviews
+    });
+    
+  } catch (error) {
+    console.error('Error fetching all reviews:', error);
+    res.status(500).json({ 
+      success: false,
+      message: 'Server error while fetching reviews' 
+    });
+  }
+});
+
+// Delete a review - allow admin to delete any review
+router.delete('/delete/:reviewId', authenticateToken, async (req, res) => {
+  try {
+    const { reviewId } = req.params;
+    const userId = req.user.id;
+    const isAdmin = req.user.role === 'admin';
+
+    // Find the review
+    const review = await Review.findById(reviewId);
+    
+    if (!review) {
+      return res.status(404).json({
+        success: false,
+        message: 'Review not found'
+      });
+    }
+    
+    // Check if the user is admin or the review owner
+    if (!isAdmin && review.UserID.toString() !== userId) {
+      return res.status(403).json({
+        success: false,
+        message: 'You can only delete your own reviews'
+      });
+    }
+    
+    // Delete the review
+    await Review.findByIdAndDelete(reviewId);
+    
+    res.status(200).json({
+      success: true,
+      message: 'Review deleted successfully'
+    });
+    
+  } catch (error) {
+    console.error('Error deleting review:', error);
+    res.status(500).json({
+      success: false,
+      message: 'Server error while deleting review'
+    });
+  }
+});
+
 module.exports = router;

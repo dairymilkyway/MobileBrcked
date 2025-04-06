@@ -37,6 +37,7 @@ interface ReviewEligibility {
 // Define the state interface
 interface ReviewState {
   reviews: Review[];
+  allReviews: Review[];
   product: ProductInfo | null;
   ratings: RatingData;
   reviewEligibility: ReviewEligibility;
@@ -44,12 +45,15 @@ interface ReviewState {
   ratingLoading: boolean;
   eligibilityLoading: boolean;
   submitting: boolean;
+  deleting: boolean;
+  fetchingAllReviews: boolean;
   error: string | null;
 }
 
 // Initial state
 const initialState: ReviewState = {
   reviews: [],
+  allReviews: [],
   product: null,
   ratings: {
     averageRating: 0,
@@ -65,6 +69,8 @@ const initialState: ReviewState = {
   ratingLoading: false,
   eligibilityLoading: false,
   submitting: false,
+  deleting: false,
+  fetchingAllReviews: false,
   error: null
 };
 
@@ -213,6 +219,74 @@ export const submitReview = createAsyncThunk(
   }
 );
 
+// Delete a review
+export const deleteReview = createAsyncThunk(
+  'reviews/deleteReview',
+  async ({ reviewId, productId }: { reviewId: string, productId?: string }, { rejectWithValue, dispatch }) => {
+    try {
+      const token = await AsyncStorage.getItem('token');
+      
+      if (!token) {
+        throw new Error('Authentication required');
+      }
+      
+      const response = await fetch(`${API_BASE_URL}/reviews/delete/${reviewId}`, {
+        method: 'DELETE',
+        headers: {
+          'Authorization': `Bearer ${token}`,
+          'Content-Type': 'application/json'
+        }
+      });
+      
+      if (!response.ok) {
+        const errorData = await response.json().catch(() => ({}));
+        throw new Error(errorData.message || `Error ${response.status}: Failed to delete review`);
+      }
+      
+      const data = await response.json();
+      
+      // If we have a productId, refresh the product reviews
+      if (productId) {
+        dispatch(fetchProductReviews(productId));
+        dispatch(fetchProductRatings(productId));
+        dispatch(checkReviewEligibilityThunk(productId));
+      }
+      
+      return { success: true, message: data.message || 'Review deleted successfully' };
+    } catch (err: any) {
+      console.error('Error deleting review:', err);
+      return rejectWithValue(err.message || 'Failed to delete review');
+    }
+  }
+);
+
+// Fetch all reviews
+export const fetchAllReviews = createAsyncThunk(
+  'reviews/fetchAllReviews',
+  async (_, { rejectWithValue }) => {
+    try {
+      const response = await fetch(`${API_BASE_URL}/reviews/all`);
+      
+      if (!response.ok) {
+        const errorText = await response.text().catch(() => 'Unknown error');
+        console.error('Error response:', errorText);
+        throw new Error(`Error ${response.status}: Failed to fetch all reviews`);
+      }
+      
+      const data = await response.json();
+      
+      if (data.success) {
+        return data.reviews || [];
+      } else {
+        throw new Error(data.message || 'Failed to load all reviews');
+      }
+    } catch (err: any) {
+      console.error('Error fetching all reviews:', err);
+      return rejectWithValue(err.message || 'Failed to load all reviews');
+    }
+  }
+);
+
 // Create the slice
 const reviewSlice = createSlice({
   name: 'reviews',
@@ -296,6 +370,35 @@ const reviewSlice = createSlice({
       .addCase(submitReview.rejected, (state, action) => {
         state.submitting = false;
         state.error = action.payload as string || 'Failed to submit review';
+      })
+      
+    // Handle deleteReview
+      .addCase(deleteReview.pending, (state) => {
+        state.deleting = true;
+        state.error = null;
+      })
+      .addCase(deleteReview.fulfilled, (state) => {
+        state.deleting = false;
+        state.error = null;
+      })
+      .addCase(deleteReview.rejected, (state, action) => {
+        state.deleting = false;
+        state.error = action.payload as string || 'Failed to delete review';
+      })
+      
+    // Handle fetchAllReviews
+      .addCase(fetchAllReviews.pending, (state) => {
+        state.fetchingAllReviews = true;
+        state.error = null;
+      })
+      .addCase(fetchAllReviews.fulfilled, (state, action: PayloadAction<Review[]>) => {
+        state.fetchingAllReviews = false;
+        state.allReviews = action.payload;
+        state.error = null;
+      })
+      .addCase(fetchAllReviews.rejected, (state, action) => {
+        state.fetchingAllReviews = false;
+        state.error = action.payload as string || 'Failed to fetch all reviews';
       });
   },
 });
