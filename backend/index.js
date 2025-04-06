@@ -22,6 +22,7 @@ const userRoutes = require('./apis/UserAPI');
 const cartRoutes = require('./apis/CartAPI'); // Import cart routes
 const orderRoutes = require('./apis/OrderAPI'); // Import order routes
 const testRoutes = require('./apis/TestAPI'); // Import test routes
+const notificationRoutes = require('./apis/NotificationAPI'); // Import notification routes
 const authenticateToken = require('./middleware/auth'); // ✅ Import auth middleware
 const { generateToken, blacklistToken, cleanupExpiredTokens } = require('./utils/tokenManager');
 const { uploadToCloudinary } = require('./utils/cloudinary');
@@ -290,7 +291,6 @@ initDatabases().then(() => {
   app.use('/api/test', testRoutes);
 
   // Use notification routes
-  const notificationRoutes = require('./apis/NotificationAPI');
   app.use('/api/notifications', notificationRoutes);
 
   // ✅ Protected route example

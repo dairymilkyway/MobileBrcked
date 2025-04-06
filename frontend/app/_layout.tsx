@@ -21,6 +21,7 @@ import { OrderModalProvider } from '@/contexts/OrderModalContext';
 import { useRouter } from 'expo-router';
 import type { AppDispatch } from '@/redux/store';
 import { fetchUserNotifications } from '@/utils/api';
+import { hasProductBeenNotified, markProductAsNotified } from '@/utils/notificationHelper';
 
 import { useColorScheme } from '@/hooks/useColorScheme';
 
@@ -35,7 +36,7 @@ interface Order {
   // Add other properties as needed
 }
 
-// Define background notification handler
+// Define background notification handler with higher priority settings
 Notifications.setNotificationHandler({
   handleNotification: async (notification) => {
     const data = notification.request.content.data;
@@ -43,30 +44,30 @@ Notifications.setNotificationHandler({
     // Check specifically for orderPlaced or orderUpdate type
     const isOrderPlaced = data && data.type === 'orderPlaced';
     const isOrderUpdate = data && data.type === 'orderUpdate';
+    const isNewProduct = data && data.type === 'newProduct';
     const isOrderNotification = isOrderPlaced || isOrderUpdate;
     
     // Always show these notifications with high priority
-    const shouldForce = data && (data.forceShow || isOrderNotification || data.immediate);
+    const shouldForce = true; // Always force show notifications for faster delivery
     
     console.log(`Notification handler - data:`, JSON.stringify(data));
-    console.log(`Notification handler - isOrderPlaced: ${isOrderPlaced}, isOrderUpdate: ${isOrderUpdate}, shouldForce: ${shouldForce}`);
     
-    // Set highest priority for order placed notifications
-    const priority = isOrderPlaced ? 
-      Notifications.AndroidNotificationPriority.MAX : 
-      (shouldForce ? Notifications.AndroidNotificationPriority.HIGH : Notifications.AndroidNotificationPriority.DEFAULT);
+    // Set MAX priority for all notifications to ensure they're displayed quickly
+    const priority = Notifications.AndroidNotificationPriority.MAX;
     
     return {
-      shouldShowAlert: true,  // This controls the banner-style notification, not Alert.alert
-      shouldPlaySound: true,  // Keep sound
-      shouldSetBadge: true,   // Keep badge
+      shouldShowAlert: true,
+      shouldPlaySound: true,
+      shouldSetBadge: true,
       priority: priority,
-      // On iOS, ensure presentation options
+      // On iOS, ensure presentation options with immediate display flags
       iOS: {
         sound: true,
         presentAlert: true,
         presentBadge: true,
-        presentSound: true
+        presentSound: true,
+        // Add critical alert flag on iOS for important notifications
+        criticalAlert: isNewProduct || isOrderPlaced
       }
     };
   },
@@ -80,14 +81,15 @@ function NotificationSetup() {
   const recentlyShownNotifications = useRef<Record<string, number>>({});
 
   // Move the handleNotificationResponse function here, inside the component
-  const handleNotificationResponse = (response: Notifications.NotificationResponse) => {
+  const handleNotificationResponse = async (response: Notifications.NotificationResponse) => {
     const data = response.notification.request.content.data;
     
     // Check if this is an order notification (update or placed)
     const isOrderUpdate = data?.type === 'orderUpdate' && data?.orderId;
     const isOrderPlaced = data?.type === 'orderPlaced' && data?.orderId;
+    const isNewProduct = data?.type === 'newProduct' && data?.productId;
     
-    console.log(`${Platform.OS}: Notification response received - isOrderUpdate: ${isOrderUpdate}, isOrderPlaced: ${isOrderPlaced}`);
+    console.log(`${Platform.OS}: Notification response received - isOrderUpdate: ${isOrderUpdate}, isOrderPlaced: ${isOrderPlaced}, isNewProduct: ${isNewProduct}`);
     
     // This is ONLY triggered when a notification is explicitly clicked by the user
     if ((isOrderUpdate || isOrderPlaced) && data?.orderId) {
@@ -114,6 +116,62 @@ function NotificationSetup() {
         body: response.notification.request.content.body || 'Your order has been updated',
         data: notificationData
       }));
+    }
+    // Handle product notifications
+    else if (isNewProduct) {
+      const productId = data.productId;
+      console.log(`${Platform.OS}: Product notification response for product:`, productId);
+      
+      try {
+        // Check if we've already processed this product notification
+        const alreadyNotified: boolean = await hasProductBeenNotified(productId);
+        
+        if (alreadyNotified) {
+          console.log(`${Platform.OS}: Product ${productId} has already been notified, not showing modal`);
+          return;
+        }
+        
+        // Set the preventNavigation flag for Android devices
+        const shouldPreventNavigation = Platform.OS === 'android';
+        
+        // Prepare notification data with platform-specific flags
+        const notificationData = {
+          ...data,
+          type: 'newProduct',
+          productId: productId,
+          showModal: true,       // This flag indicates the modal should be shown
+          clicked: true,         // Add explicit clicked flag 
+          preventNavigation: shouldPreventNavigation,
+          timestamp: Date.now()  // Add current timestamp for uniqueness
+        };
+        
+        // Add to Redux for handling by OrderModalContext
+        console.log(`${Platform.OS}: Dispatching clicked new product notification to Redux`);
+        dispatch(addNotification({
+          title: response.notification.request.content.title || '🔥 New Product Alert! ��️',
+          body: response.notification.request.content.body || '✨ Check out our new product! 🤩',
+          data: notificationData
+        }));
+        
+        // Mark this product as notified to prevent future notifications
+        await markProductAsNotified(productId);
+      } catch (error: unknown) {
+        console.error(`${Platform.OS}: Error checking if product ${productId} has been notified:`, error);
+        
+        // Still dispatch the notification in case of error
+        dispatch(addNotification({
+          title: response.notification.request.content.title || '🔥 New Product Alert! 🛍️',
+          body: response.notification.request.content.body || '✨ Check out our new product! 🤩',
+          data: {
+            ...data,
+            type: 'newProduct',
+            showModal: true,
+            clicked: true,
+            preventNavigation: Platform.OS === 'android',
+            timestamp: Date.now()
+          }
+        }));
+      }
     }
   };
 
@@ -440,16 +498,177 @@ function NotificationSetup() {
     }
   };
 
+  // Helper function to check if we've recently shown a notification for this product
+  const hasRecentlyShownProductNotification = (productId: string): boolean => {
+    const key = `product-${productId}`;
+    const timestamp = recentlyShownNotifications.current[key];
+    
+    if (!timestamp) return false;
+    
+    // Check if shown in the last 30 minutes (to prevent repeated notifications)
+    const now = Date.now();
+    return (now - timestamp) < 1800000; // 30 minutes
+  };
+  
+  // Helper function to mark a product notification as shown
+  const markProductNotificationAsShown = (productId: string) => {
+    const key = `product-${productId}`;
+    recentlyShownNotifications.current[key] = Date.now();
+  };
+
+  // Add a function to check for recent product updates
+  const checkRecentProductUpdates = async () => {
+    try {
+      const userToken = await AsyncStorage.getItem('userToken');
+      const userRole = await AsyncStorage.getItem('userRole');
+      
+      // Only check for updates if the user is a regular user and logged in
+      if (!userToken || userRole !== 'user') {
+        return;
+      }
+      
+      // Get the last check timestamp
+      let lastChecked = await AsyncStorage.getItem('lastProductUpdateCheck');
+      if (!lastChecked) {
+        lastChecked = (Date.now() - (60 * 60 * 1000)).toString(); // Default to 1 hour ago
+      }
+      
+      // Check if we need to skip this check (to avoid too frequent checks)
+      const lastCheckTime = parseInt(lastChecked);
+      const now = Date.now();
+      const CHECK_INTERVAL = 5000; // Check every 5 seconds to show notifications faster
+      
+      if (now - lastCheckTime < CHECK_INTERVAL) {
+        // Skip checking too frequently
+        return;
+      }
+      
+      try {
+        // Check for notification receipts related to new products
+        const response = await axios.get(`${API_BASE_URL}/notifications/receipts?lastChecked=${lastChecked}`, {
+          headers: {
+            'Authorization': `Bearer ${userToken}`
+          }
+        });
+        
+        // Update the last check timestamp immediately to avoid duplicate checks
+        await AsyncStorage.setItem('lastProductUpdateCheck', now.toString());
+        
+        if (response.data.success && response.data.data && response.data.data.length > 0) {
+          // Filter for product notifications only and log once
+          const productNotifications = response.data.data.filter(
+            (receipt: any) => receipt.type === 'newProduct' && receipt.productId
+          );
+          
+          if (productNotifications.length > 0) {
+            console.log(`Found ${productNotifications.length} product notifications`);
+            
+            // Group notifications by productId to show only the newest per product
+            const productMap: Record<string, any> = {};
+            
+            // Only keep the newest notification for each product
+            productNotifications.forEach((notification: any) => {
+              const { productId, timestamp = 0 } = notification;
+              if (!productMap[productId] || productMap[productId].timestamp < timestamp) {
+                productMap[productId] = notification;
+              }
+            });
+            
+            // Process each unique product notification
+            const productIds = Object.keys(productMap);
+            let shownCount = 0;
+            let skipCount = 0;
+            
+            for (const productId of productIds) {
+              // First check if we've already notified this product (ever)
+              const alreadyNotified = await hasProductBeenNotified(productId);
+              
+              if (alreadyNotified) {
+                skipCount++;
+                continue;
+              }
+              
+              // Show only this new product notification
+              const notification = productMap[productId];
+              const { message, timestamp } = notification;
+              
+              console.log(`Processing new product notification for product ${productId}`);
+              
+              // Schedule an immediate notification
+              Notifications.scheduleNotificationAsync({
+                content: {
+                  title: '🔥 New Product Alert! 🛍️',
+                  body: message || '✨ Check out our new product! 🤩',
+                  data: { 
+                    productId, 
+                    type: 'newProduct',
+                    forceShow: true,
+                    immediate: true,
+                    timestamp: timestamp || now,
+                    source: 'receipt',
+                    showModal: true
+                  }
+                },
+                trigger: null // Send immediately
+              });
+              
+              // Also add to Redux
+              dispatch(addNotification({
+                title: '🔥 New Product Alert! 🛍️',
+                body: message || '✨ Check out our new product! 🤩',
+                data: { 
+                  productId, 
+                  type: 'newProduct',
+                  source: 'receipt',
+                  showModal: true
+                }
+              }));
+              
+              // Mark product as notified permanently to prevent future notifications
+              await markProductAsNotified(productId);
+              
+              shownCount++;
+              
+              // Only show one notification per check to reduce spam
+              break;
+            }
+            
+            // Log summary of what happened
+            if (productIds.length > 0) {
+              if (skipCount === productIds.length) {
+                console.log(`All ${skipCount} products have already been notified to the user`);
+              } else if (shownCount > 0) {
+                console.log(`Showed notification for ${shownCount} new product(s), skipped ${skipCount} already notified`);
+              }
+            }
+          }
+        }
+      } catch (innerError: any) {
+        // This will happen if the notifications endpoint doesn't exist yet
+        if (innerError.response && innerError.response.status === 404) {
+          console.log('Product notifications endpoint not available yet');
+        } else {
+          console.error('Error checking product notifications:', innerError.message);
+        }
+      }
+    } catch (error) {
+      console.error('Error in checkRecentProductUpdates:', error);
+    }
+  };
+
   useEffect(() => {
-    // Start polling for order updates (every 5 seconds)
+    // Start polling for order updates (every 3 seconds)
     pollForOrderUpdates(); // Initial poll immediately
-    pollingInterval.current = setInterval(pollForOrderUpdates, 5000);
+    pollingInterval.current = setInterval(pollForOrderUpdates, 3000);
     
-    // Check for notification receipts every 3 seconds
-    const receiptInterval = setInterval(checkNotificationReceipts, 3000);
+    // Check for notification receipts every 2 seconds
+    const receiptInterval = setInterval(checkNotificationReceipts, 2000);
     
-    // Also check the dedicated recent updates endpoint every 4 seconds
-    const statusUpdateInterval = setInterval(checkRecentStatusUpdates, 4000);
+    // Also check the dedicated recent updates endpoint every 3 seconds
+    const statusUpdateInterval = setInterval(checkRecentStatusUpdates, 3000);
+    
+    // Also check for product updates every 5 seconds (reduced from 30s for faster notifications)
+    const productUpdateInterval = setInterval(checkRecentProductUpdates, 5000);
     
     // Check for pending notifications from background/killed state
     const checkPendingNotifications = async () => {
@@ -476,7 +695,6 @@ function NotificationSetup() {
       }
     };
     
-    // Check for pending notifications on component mount
     checkPendingNotifications();
     
     // Don't request permissions here anymore - permissions will be requested on login instead
@@ -541,7 +759,16 @@ function NotificationSetup() {
 
     // Set up notification response handler for when users tap on notifications
     const responseListener = Notifications.addNotificationResponseReceivedListener(
-      handleNotificationResponse
+      (response) => {
+        // We need to handle async function separately
+        (async () => {
+          try {
+            await handleNotificationResponse(response);
+          } catch (error) {
+            console.error(`${Platform.OS}: Error handling notification response:`, error);
+          }
+        })();
+      }
     );
 
     // Clean up listeners and intervals when the component unmounts
@@ -551,6 +778,7 @@ function NotificationSetup() {
       }
       clearInterval(receiptInterval);
       clearInterval(statusUpdateInterval);
+      clearInterval(productUpdateInterval);
       cleanupListeners();
       Notifications.removeNotificationSubscription(responseListener);
     };
@@ -740,6 +968,58 @@ export default function RootLayout() {
               console.error('App startup: Error fetching notifications from server:', apiError);
               // Initialize with empty array to mark as loaded
               store.dispatch(setNotifications([]));
+            }
+            
+            // Check for pending product modals
+            try {
+              const pendingProductsStr = await AsyncStorage.getItem('pendingProductModals');
+              
+              if (pendingProductsStr) {
+                const pendingProducts = JSON.parse(pendingProductsStr);
+                console.log(`App startup: Found ${pendingProducts.length} pending product modals`);
+                
+                if (pendingProducts.length > 0) {
+                  // Get the most recent product modal
+                  const mostRecent = pendingProducts.reduce((prev: any, current: any) => 
+                    (prev.timestamp > current.timestamp) ? prev : current
+                  );
+                  
+                  const productId = mostRecent.productId;
+                  console.log(`App startup: Processing most recent product modal for ${productId}`);
+                  
+                  // Check if we've already notified about this product
+                  const alreadyNotified = await hasProductBeenNotified(productId);
+                  
+                  if (alreadyNotified) {
+                    console.log(`App startup: Product ${productId} has already been notified, skipping`);
+                  } else {
+                    console.log(`App startup: Showing notification for product ${productId}`);
+                    
+                    // Add to Redux
+                    store.dispatch(addNotification({
+                      title: '🔥 New Product Alert! 🛍️',
+                      body: '✨ Check out our new product! 🤩',
+                      data: {
+                        productId: productId,
+                        type: 'newProduct',
+                        showModal: true,
+                        forceShow: true,
+                        clicked: true,
+                        immediate: true,
+                        timestamp: Date.now()
+                      }
+                    }));
+                    
+                    // Mark product as permanently notified
+                    await markProductAsNotified(productId);
+                  }
+                  
+                  // Clear pending product modals regardless of whether we showed it
+                  await AsyncStorage.removeItem('pendingProductModals');
+                }
+              }
+            } catch (productError) {
+              console.error('App startup: Error processing pending product modals:', productError);
             }
           }
         } catch (error) {

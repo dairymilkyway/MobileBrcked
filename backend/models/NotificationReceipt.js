@@ -2,7 +2,8 @@ const mongoose = require('mongoose');
 
 // Create a notification receipt schema
 const notificationReceiptSchema = new mongoose.Schema({
-  orderId: { type: String, required: true },
+  orderId: { type: String },
+  productId: { type: String },
   userId: { type: String, required: true },
   status: { type: String, required: true },
   previousStatus: { type: String },
@@ -11,7 +12,8 @@ const notificationReceiptSchema = new mongoose.Schema({
   timestamp: { type: Date, default: Date.now },
   forceShow: { type: Boolean, default: true },
   showModal: { type: Boolean, default: false },
-  uniqueId: { type: String }
+  uniqueId: { type: String },
+  type: { type: String, enum: ['orderUpdate', 'orderPlaced', 'newProduct'], default: 'orderUpdate' }
 });
 
 // Create and export the model

@@ -76,6 +76,9 @@ export const getProductById = async (id: string): Promise<Product> => {
   }
 };
 
+// Get product by ID - Alias for getProductById for compatibility
+export const getProduct = getProductById;
+
 // Handle authentication errors by clearing tokens
 export const handleAuthError = async () => {
   try {

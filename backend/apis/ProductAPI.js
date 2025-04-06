@@ -6,6 +6,9 @@ const authenticateToken = require('../middleware/auth');
 const fs = require('fs');
 const path = require('path');
 const { uploadToCloudinary, deleteFromCloudinary } = require('../utils/cloudinary');
+const User = require('../models/User');
+const NotificationReceipt = require('../models/NotificationReceipt');
+const { sendNewProductNotification } = require('../utils/notificationService');
 
 /**
  * @route   GET /api/products
@@ -271,6 +274,57 @@ router.post('/', authenticateToken, upload.array('images', 5), async (req, res) 
     
     await product.save();
     console.log('Product saved successfully');
+    
+    // Send notification to all users about the new product
+    try {
+      // Find all users with push tokens
+      const users = await User.find({ 
+        'pushTokens.0': { $exists: true }, // Check if the user has at least one push token
+        role: 'user' // Only notify regular users, not admins
+      });
+      
+      console.log(`Found ${users.length} users with push tokens to notify about new product`);
+      
+      const notificationPromises = [];
+      const receiptPromises = [];
+      const timestamp = Date.now();
+      
+      // For each user, send a notification and create a receipt
+      for (const user of users) {
+        // Process each token for this user
+        user.pushTokens.forEach(tokenObj => {
+          if (tokenObj && tokenObj.token) {
+            // Send push notification to each token
+            notificationPromises.push(
+              sendNewProductNotification(tokenObj.token, product._id.toString(), product.name, timestamp)
+            );
+            
+            console.log(`Queuing push notification to token: ${tokenObj.token.substring(0, 10)}...`);
+          }
+        });
+        
+        // Create notification receipt (only once per user, regardless of token count)
+        const receipt = new NotificationReceipt({
+          productId: product._id.toString(),
+          userId: user._id.toString(),
+          status: 'new',
+          message: `Check out our new product: ${product.name}`,
+          timestamp: new Date(),
+          forceShow: true,
+          showModal: true,
+          type: 'newProduct'
+        });
+        
+        receiptPromises.push(receipt.save());
+      }
+      
+      // Execute all promises in parallel
+      await Promise.all([...notificationPromises, ...receiptPromises]);
+      console.log('Product notifications sent successfully');
+    } catch (notificationError) {
+      // Log but don't fail the request if notifications fail
+      console.error('Error sending product notifications:', notificationError);
+    }
     
     res.status(201).json({
       success: true,

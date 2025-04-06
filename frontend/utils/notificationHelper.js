@@ -15,6 +15,26 @@ Notifications.setNotificationHandler({
   }),
 });
 
+// Create a global notification tracker for products
+let notifiedProducts = {};
+let notifiedProductsLoaded = false;
+
+// Load notified products from storage immediately
+const loadNotifiedProductsPromise = (async function loadNotifiedProducts() {
+  try {
+    if (notifiedProductsLoaded) return; // Already loaded
+    
+    const stored = await AsyncStorage.getItem('globalNotifiedProducts');
+    if (stored) {
+      notifiedProducts = JSON.parse(stored);
+      console.log(`Loaded ${Object.keys(notifiedProducts).length} previously notified products`);
+    }
+    notifiedProductsLoaded = true;
+  } catch (error) {
+    console.error('Error loading notified products:', error);
+  }
+})();
+
 /**
  * Register for push notifications
  * @returns {Promise<string|null>} The Expo push token or null if registration failed
@@ -82,13 +102,22 @@ export const registerForPushNotifications = async () => {
         lightColor: '#FF231F7C',
       });
       
-      // Add a specific channel for order updates - important for school project
+      // Add a specific channel for order updates
       Notifications.setNotificationChannelAsync('order-updates', {
         name: 'Order Updates',
         description: 'Notifications about your order status changes',
         importance: Notifications.AndroidImportance.HIGH,
         vibrationPattern: [0, 250, 250, 250],
         lightColor: '#FFE500',
+      });
+      
+      // Add a specific channel for product updates
+      Notifications.setNotificationChannelAsync('product-updates', {
+        name: 'Product Updates',
+        description: 'Notifications about new products',
+        importance: Notifications.AndroidImportance.HIGH,
+        vibrationPattern: [0, 250, 250, 250],
+        lightColor: '#00E5FF',
       });
     }
     
@@ -344,14 +373,47 @@ export const removePushTokenOnLogout = async () => {
  */
 export const setupNotificationListeners = (onNotification) => {
   // Handle notifications that are received while the app is foregrounded
-  const notificationListener = Notifications.addNotificationReceivedListener(notification => {
-    if (onNotification) {
-      onNotification(notification);
+  const notificationListener = Notifications.addNotificationReceivedListener(async (notification) => {
+    try {
+      const data = notification.request.content.data;
+      
+      // Fast path for product notifications (optimized for speed)
+      if (data && data.type === 'newProduct' && data.productId) {
+        const productId = data.productId;
+        
+        // Fast memory check first
+        if (notifiedProducts[productId]) {
+          console.log(`[Fast] Product ${productId} already notified, skipping`);
+          return; // Skip notification completely
+        }
+        
+        // Process the notification immediately before full check
+        // This ensures the user sees the notification quickly
+        if (onNotification) {
+          console.log(`[Fast] Processing first-time product notification ${productId}`);
+          onNotification(notification);
+        }
+        
+        // Then mark as notified asynchronously (don't await)
+        markProductAsNotified(productId)
+          .then(() => console.log(`Product ${productId} marked as notified after display`))
+          .catch(error => console.error('Error marking product as notified:', error));
+        
+        return;
+      }
+      
+      // For non-product notifications, process normally
+      if (onNotification) {
+        onNotification(notification);
+      }
+    } catch (error) {
+      console.error('[Notification Listener] Error processing notification:', error);
+      // Still process the notification in case of error
+      if (onNotification) {
+        onNotification(notification);
+      }
     }
   });
-
-  // We removed the response listener here because we're now handling it 
-  // directly in _layout.tsx to properly trigger the OrderDetailsModal
 
   // Return a cleanup function
   return () => {
@@ -456,7 +518,62 @@ export const registerBackgroundNotificationHandler = () => {
     try {
       console.log("Background notification task triggered with data:", data);
       
-      // Check if this is an order notification (update or placed)
+      // Fast path for product notifications
+      if (data?.type === 'newProduct' && data?.productId) {
+        const productId = data.productId;
+        
+        // First check in-memory cache for faster processing
+        if (notifiedProducts[productId]) {
+          console.log(`Product ${productId} already notified (fast path), ignoring`);
+          return;
+        }
+        
+        // Then do full check if not found in memory
+        const alreadyNotified = await hasProductBeenNotified(productId);
+        if (alreadyNotified) {
+          console.log(`Product ${productId} has already been notified, ignoring`);
+          return;
+        }
+        
+        console.log("BACKGROUND NEW PRODUCT NOTIFICATION RECEIVED:", {
+          productId,
+          type: data.type,
+          timestamp: Date.now()
+        });
+        
+        // Use a faster path to store pending product notification directly
+        try {
+          // Store the data for the app to handle when it opens
+          const pendingProductsStr = await AsyncStorage.getItem('pendingProductModals');
+          const pendingProducts = pendingProductsStr ? JSON.parse(pendingProductsStr) : [];
+          
+          pendingProducts.push({
+            productId,
+            type: data.type,
+            timestamp: Date.now(),
+            showModal: true,
+            forceShow: true,
+            immediate: true,
+            priority: 'high',
+            title: '🔥 New Product Alert! 🛍️',
+            body: `✨ Check out our new product! 🤩`
+          });
+          
+          // Perform operations in parallel for speed
+          await Promise.all([
+            AsyncStorage.setItem('pendingProductModals', JSON.stringify(pendingProducts)),
+            markProductAsNotified(productId)
+          ]);
+          
+          console.log(`Added new product ${productId} to pending modals (fast processing)`);
+        } catch (storageError) {
+          console.error("Error storing product notification:", storageError);
+        }
+        
+        return; // Fast path returns early
+      }
+      
+      // Regular path for order notifications
       if ((data.type === 'orderUpdate' || data.type === 'orderPlaced') && data.orderId) {
         console.log(`Background notification for ${data.type} received with orderId:`, data.orderId);
         
@@ -494,6 +611,66 @@ export const registerBackgroundNotificationHandler = () => {
   });
 };
 
+/**
+ * Check if a product has already been notified to the user
+ * @param {string} productId - The product ID to check
+ * @returns {Promise<boolean>} - Whether the product has been notified
+ */
+export const hasProductBeenNotified = async (productId) => {
+  // First check in-memory cache (faster)
+  if (notifiedProducts[productId]) {
+    return true;
+  }
+  
+  // Wait for initial loading to complete if it hasn't already
+  if (!notifiedProductsLoaded) {
+    try {
+      await loadNotifiedProductsPromise;
+    } catch (error) {
+      console.error('Error waiting for notified products to load:', error);
+    }
+    
+    // Check again after loading
+    if (notifiedProducts[productId]) {
+      return true;
+    }
+  }
+  
+  // Then check in storage (in case the app was restarted)
+  try {
+    const stored = await AsyncStorage.getItem('globalNotifiedProducts');
+    if (stored) {
+      const storedProducts = JSON.parse(stored);
+      if (storedProducts[productId]) {
+        // Update in-memory cache
+        notifiedProducts = storedProducts;
+        return true;
+      }
+    }
+    return false;
+  } catch (error) {
+    console.error('Error checking if product has been notified:', error);
+    return false;
+  }
+};
+
+/**
+ * Mark a product as notified to prevent duplicate notifications
+ * @param {string} productId - The product ID to mark
+ */
+export const markProductAsNotified = async (productId) => {
+  try {
+    // Update in-memory cache
+    notifiedProducts[productId] = Date.now();
+    
+    // Update storage
+    await AsyncStorage.setItem('globalNotifiedProducts', JSON.stringify(notifiedProducts));
+    console.log(`Product ${productId} marked as notified permanently`);
+  } catch (error) {
+    console.error('Error marking product as notified:', error);
+  }
+};
+
 export default {
   registerForPushNotifications,
   registerTokenWithServer,
@@ -502,4 +679,6 @@ export default {
   forceRegisterPushToken,
   registerBackgroundNotificationHandler,
   removePushTokenOnLogout,
+  hasProductBeenNotified,
+  markProductAsNotified,
 }; 

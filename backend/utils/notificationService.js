@@ -57,6 +57,9 @@ const sendPushNotification = async (pushToken, title, body, data = {}) => {
     // iOS specific configuration
     _displayInForeground: true,
     _contentAvailable: true,
+    _mutableContent: true,
+    _interruptionLevel: 'timeSensitive', // iOS 15+ for faster delivery
+    _relevanceScore: 1.0, // Maximum relevance for faster delivery
   };
   
   // For iOS devices, we need to ensure the notification can be handled while app is in background
@@ -67,6 +70,8 @@ const sendPushNotification = async (pushToken, title, body, data = {}) => {
     // If this is an order notification, set the category for iOS action handling
     if (data.type === 'orderUpdate') {
       message._category = 'ORDER_UPDATE';
+    } else if (data.type === 'newProduct') {
+      message._category = 'NEW_PRODUCT';
     }
   }
 
@@ -206,8 +211,65 @@ const sendOrderPlacedNotification = async (pushToken, orderId, total, timestamp 
   );
 };
 
+/**
+ * Send new product notification to a user
+ * @param {string} pushToken - The Expo push token
+ * @param {string} productId - The product ID
+ * @param {string} productName - The name of the product
+ * @param {number} timestamp - Optional timestamp for uniqueness
+ * @returns {Promise<Object>} - Result of the notification
+ */
+const sendNewProductNotification = async (pushToken, productId, productName, timestamp = Date.now()) => {
+  console.log(`Preparing new product notification for product #${productId} (${productName}) with timestamp ${timestamp}`);
+  
+  const title = '🔥 New Product Alert! 🛍️';
+  const body = `✨ Check out our new product: ${productName} 🤩`;
+
+  // Create a unique identifier that combines token hash, productId and timestamp
+  // This helps Expo's deduplication and our app's deduplication
+  const tokenHash = pushToken.substring(pushToken.length - 8);
+  const uniqueId = `new-product-${productId}-${tokenHash}-${timestamp}`;
+  
+  // The random component further ensures uniqueness
+  const randomComponent = Math.floor(Math.random() * 1000).toString().padStart(3, '0');
+  const trackingId = `${productId}-${timestamp}-${randomComponent}`;
+  
+  console.log(`Using uniqueId: ${uniqueId} for product notification`);
+
+  // Use a dedicated product-updates channel with high importance
+  return sendPushNotification(
+    pushToken, 
+    title, 
+    body, 
+    { 
+      productId, 
+      type: 'newProduct',
+      importance: 'high',
+      priority: 'high', // Add explicit priority
+      ttl: 0, // Send immediately, do not delay
+      expiration: 3600, // Expire after 1 hour
+      channelId: 'product-updates',
+      showModal: true, // Add flag for modal to show when notification is tapped
+      forceShow: true,  // Ensure notification is shown even if app is in foreground
+      // Add additional metadata for iOS
+      _displayInForeground: true,
+      _contentAvailable: true,
+      _category: 'NEW_PRODUCT',
+      _mutableContent: true,
+      _interruptionLevel: 'timeSensitive', // Mark as time-sensitive for iOS 15+
+      _relevanceScore: 1.0, // Maximum relevance
+      timestamp, // Add timestamp for uniqueness
+      uniqueId, // More unique identifier
+      productNotificationId: uniqueId, // Additional reference for deduplication
+      trackingId, // Different ID for tracking
+      sentAt: Date.now() // Explicit send time
+    }
+  );
+};
+
 module.exports = {
   sendPushNotification,
   sendOrderStatusNotification,
   sendOrderPlacedNotification,
+  sendNewProductNotification,
 }; 
