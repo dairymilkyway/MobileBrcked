@@ -3,14 +3,6 @@ const { Expo } = require('expo-server-sdk');
 // Create a new Expo SDK client
 const expo = new Expo();
 
-/**
- * Send push notification to a specific user
- * @param {string} pushToken - The Expo push token
- * @param {string} title - Notification title
- * @param {string} body - Notification body
- * @param {Object} data - Additional data to send with the notification
- * @returns {Promise<Object>} - Result of the notification
- */
 const sendPushNotification = async (pushToken, title, body, data = {}) => {
   console.log('============================================');
   console.log('SENDING PUSH NOTIFICATION');
@@ -121,13 +113,7 @@ const sendPushNotification = async (pushToken, title, body, data = {}) => {
   }
 };
 
-/**
- * Send order status update notification to a user
- * @param {string} pushToken - The Expo push token
- * @param {string} orderId - The order ID
- * @param {string} status - The new order status
- * @returns {Promise<Object>} - Result of the notification
- */
+
 const sendOrderStatusNotification = async (pushToken, orderId, status) => {
   console.log(`Preparing order status notification for order #${orderId}, status: ${status}`);
   
@@ -173,14 +159,6 @@ const sendOrderStatusNotification = async (pushToken, orderId, status) => {
   );
 };
 
-/**
- * Send order placed notification to a user
- * @param {string} pushToken - The Expo push token
- * @param {string} orderId - The order ID
- * @param {number} total - The order total
- * @param {number} timestamp - Optional timestamp for uniqueness
- * @returns {Promise<Object>} - Result of the notification
- */
 const sendOrderPlacedNotification = async (pushToken, orderId, total, timestamp = Date.now()) => {
   console.log(`Preparing order placed notification for order #${orderId} with timestamp ${timestamp}`);
   
@@ -211,14 +189,6 @@ const sendOrderPlacedNotification = async (pushToken, orderId, total, timestamp 
   );
 };
 
-/**
- * Send new product notification to a user
- * @param {string} pushToken - The Expo push token
- * @param {string} productId - The product ID
- * @param {string} productName - The name of the product
- * @param {number} timestamp - Optional timestamp for uniqueness
- * @returns {Promise<Object>} - Result of the notification
- */
 const sendNewProductNotification = async (pushToken, productId, productName, timestamp = Date.now()) => {
   console.log(`Preparing new product notification for product #${productId} (${productName}) with timestamp ${timestamp}`);
   
